@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log in — Ledger</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+  <div class="auth-page">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="mark">$</div>
+        <span>Ledger</span>
+      </div>
+      <h1>Welcome back</h1>
+      <p class="auth-sub">Log in to see your spending history.</p>
+
+      <div class="error-banner" id="errorBanner"></div>
+
+      <form id="loginForm">
+        <div class="field">
+          <label for="username">Username or email</label>
+          <input type="text" id="username" name="username" autocomplete="username" required />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" autocomplete="current-password" required />
+        </div>
+        <button type="submit" class="btn-primary" id="submitBtn">Log in</button>
+      </form>
+
+      <p class="auth-switch">Don't have an account? <a href="{{ url_for('signup_page') }}">Sign up</a></p>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+  <script>
+    setupAuthForm({
+      formId: "loginForm",
+      endpoint: "/api/login",
+      submitId: "submitBtn",
+      submitLabel: "Log in",
+      onSuccess: () => { window.location.href = "/dashboard"; }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — Ledger</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+
+  <div class="mobile-topbar">
+    <div class="brand"><div class="mark">$</div> Ledger</div>
+    <button id="mobileLogout">Log out</button>
+  </div>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="mark">$</div>
+        <span>Ledger</span>
+      </div>
+      <div class="greeting">Signed in as</div>
+      <div class="username">{{ username }}</div>
+      <button class="logout-btn" id="logoutBtn">Log out</button>
+    </aside>
+
+    <main class="main">
+      <div class="main-header">
+        <h1>Your overview</h1>
+        <span class="date-label" id="todayLabel"></span>
+      </div>
+
+      <section class="summary-grid">
+        <div class="summary-card balance">
+          <div class="label">Balance</div>
+          <div class="value amount" id="balanceValue">₹0.00</div>
+        </div>
+        <div class="summary-card income">
+          <div class="label">Total income</div>
+          <div class="value amount" id="incomeValue">₹0.00</div>
+        </div>
+        <div class="summary-card expense">
+          <div class="label">Total expense</div>
+          <div class="value amount" id="expenseValue">₹0.00</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Add a transaction</h2>
+        <form class="txn-form" id="txnForm">
+          <div class="field">
+            <label>Type</label>
+            <div class="type-toggle">
+              <button type="button" data-type="expense" class="active">Expense</button>
+              <button type="button" data-type="income">Income</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="category">Category</label>
+            <input type="text" id="category" placeholder="e.g. Food" required />
+          </div>
+          <div class="field">
+            <label for="amount">Amount</label>
+            <input type="number" id="amount" min="0.01" step="0.01" placeholder="0.00" required />
+          </div>
+          <div class="field">
+            <label for="txnDate">Date</label>
+            <input type="date" id="txnDate" required />
+          </div>
+          <button type="submit" class="btn-primary" id="addTxnBtn">Add</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Breakdown</h2>
+        <div class="charts-grid">
+          <div class="chart-box"><canvas id="categoryChart"></canvas></div>
+          <div class="chart-box"><canvas id="trendChart"></canvas></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>History</h2>
+        <div class="filters">
+          <select id="filterType">
+            <option value="">All types</option>
+            <option value="income">Income</option>
+            <option value="expense">Expense</option>
+          </select>
+          <select id="filterMonth">
+            <option value="">All months</option>
+          </select>
+        </div>
+
+        <table class="txn-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Category</th>
+              <th>Note</th>
+              <th>Amount</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="txnTableBody"></tbody>
+        </table>
+
+        <div class="txn-cards" id="txnCards"></div>
+
+        <div class="empty-state" id="emptyState" style="display:none;">No transactions yet — add your first one above.</div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
