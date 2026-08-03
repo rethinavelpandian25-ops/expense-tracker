@@ -165,6 +165,18 @@ def api_logout():
     return jsonify({"message": "Logged out."}), 200
 
 
+@app.route("/api/account", methods=["DELETE"])
+@login_required
+def delete_account():
+    # Grab the real row before logging out — logout_user() swaps
+    # current_user for an AnonymousUserMixin, which has no .id to delete.
+    user = db.session.get(User, current_user.id)
+    logout_user()
+    db.session.delete(user)  # cascade="all, delete-orphan" removes their transactions too
+    db.session.commit()
+    return jsonify({"message": "Account deleted."}), 200
+
+
 # ---------------------------------------------------------------------------
 # Transaction API  (all scoped to current_user — users never see each other's data)
 # ---------------------------------------------------------------------------
@@ -274,6 +286,14 @@ def delete_transaction(txn_id):
     db.session.delete(txn)
     db.session.commit()
     return jsonify({"message": "Deleted."}), 200
+
+
+@app.route("/api/transactions/clear", methods=["DELETE"])
+@login_required
+def clear_transactions():
+    Transaction.query.filter_by(user_id=current_user.id).delete()
+    db.session.commit()
+    return jsonify({"message": "All transactions deleted."}), 200
 
 
 @app.route("/api/summary", methods=["GET"])

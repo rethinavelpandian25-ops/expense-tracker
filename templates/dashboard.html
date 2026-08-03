@@ -5,84 +5,70 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard — Ledger</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
 </head>
 <body>
 
-  <div class="mobile-topbar">
-    <div class="brand"><div class="mark">$</div> Ledger</div>
-    <button id="mobileLogout">Log out</button>
-  </div>
-
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
-        <div class="mark">$</div>
+        <div class="mark">₹</div>
         <span>Ledger</span>
       </div>
-      <div class="greeting">Signed in as</div>
-      <div class="username">{{ username }}</div>
-      <button class="logout-btn" id="logoutBtn">Log out</button>
+
+      <nav class="nav-links">
+        <button class="nav-link active" data-target="overview">Dashboard</button>
+        <button class="nav-link" data-target="history">Transactions</button>
+        <button class="nav-link" data-target="charts">Reports</button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="greeting">Signed in as</div>
+        <div class="username">{{ username }}</div>
+        <button class="logout-btn" id="logoutBtn">Log out</button>
+        <button class="danger-link" id="deleteAccountBtn">Delete account</button>
+      </div>
     </aside>
 
     <main class="main">
-      <div class="main-header">
-        <h1>Your overview</h1>
-        <span class="date-label" id="todayLabel"></span>
-      </div>
-
-      <section class="summary-grid">
-        <div class="summary-card balance">
-          <div class="label">Balance</div>
-          <div class="value amount" id="balanceValue">₹0.00</div>
+      <header class="topbar">
+        <div class="search-wrap">
+          <input type="text" id="searchInput" placeholder="Search category, note or amount…" />
         </div>
-        <div class="summary-card income">
-          <div class="label">Total income</div>
-          <div class="value amount" id="incomeValue">₹0.00</div>
-        </div>
-        <div class="summary-card expense">
-          <div class="label">Total expense</div>
-          <div class="value amount" id="expenseValue">₹0.00</div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <h2>Add a transaction</h2>
-        <form class="txn-form" id="txnForm">
-          <div class="field">
-            <label>Type</label>
-            <div class="type-toggle">
-              <button type="button" data-type="expense" class="active">Expense</button>
-              <button type="button" data-type="income">Income</button>
+        <div class="topbar-actions">
+          <button class="icon-btn" id="downloadPdfBtn" title="Download PDF">⬇</button>
+          <div class="avatar-menu">
+            <button class="avatar" id="avatarBtn">{{ username[0]|upper }}</button>
+            <div class="dropdown" id="avatarDropdown">
+              <button id="dropdownLogout">Log out</button>
+              <button id="dropdownDeleteAccount" class="danger">Delete account</button>
             </div>
           </div>
-          <div class="field">
-            <label for="category">Category</label>
-            <input type="text" id="category" placeholder="e.g. Food" required />
-          </div>
-          <div class="field">
-            <label for="amount">Amount</label>
-            <input type="number" id="amount" min="0.01" step="0.01" placeholder="0.00" required />
-          </div>
-          <div class="field">
-            <label for="txnDate">Date</label>
-            <input type="date" id="txnDate" required />
-          </div>
-          <button type="submit" class="btn-primary" id="addTxnBtn">Add</button>
-        </form>
-      </section>
-
-      <section class="panel">
-        <h2>Breakdown</h2>
-        <div class="charts-grid">
-          <div class="chart-box"><canvas id="categoryChart"></canvas></div>
-          <div class="chart-box"><canvas id="trendChart"></canvas></div>
         </div>
+      </header>
+
+      <section id="overview">
+        <div class="balance-card">
+          <div class="balance-info">
+            <div class="label">Your balance</div>
+            <div class="value amount" id="balanceValue">₹0.00</div>
+          </div>
+          <div class="balance-actions">
+            <button class="btn-ghost" id="addTxnOpenBtn">+ Add transaction</button>
+            <button class="btn-solid" id="downloadPdfBtn2">⬇ Download PDF</button>
+          </div>
+        </div>
+
+        <div class="tiles-grid" id="categoryTiles"></div>
       </section>
 
-      <section class="panel">
-        <h2>History</h2>
+      <section class="panel" id="history">
+        <div class="panel-header">
+          <h2>Transaction history</h2>
+          <button class="btn-text" id="clearHistoryBtn">Clear all</button>
+        </div>
+
         <div class="filters">
           <select id="filterType">
             <option value="">All types</option>
@@ -112,12 +98,88 @@
 
         <div class="empty-state" id="emptyState" style="display:none;">No transactions yet — add your first one above.</div>
       </section>
+
+      <section class="panel" id="charts">
+        <h2>Reports</h2>
+        <div class="charts-grid">
+          <div class="chart-box"><canvas id="categoryChart"></canvas></div>
+          <div class="chart-box"><canvas id="trendChart"></canvas></div>
+        </div>
+      </section>
     </main>
   </div>
+
+  <!-- Add / edit transaction modal -->
+  <div class="modal-overlay" id="txnModalOverlay">
+    <div class="modal">
+      <h2 id="txnModalTitle">Add transaction</h2>
+      <form id="txnForm">
+        <input type="hidden" id="txnId" />
+        <div class="type-toggle">
+          <button type="button" data-type="expense" class="active">Expense</button>
+          <button type="button" data-type="income">Income</button>
+        </div>
+        <div class="field">
+          <label for="modalCategory">Category</label>
+          <input type="text" id="modalCategory" maxlength="50" placeholder="e.g. Food" required />
+        </div>
+        <div class="field">
+          <label for="modalAmount">Amount (₹)</label>
+          <input type="number" id="modalAmount" min="0.01" step="0.01" placeholder="0.00" required />
+        </div>
+        <div class="field">
+          <label for="modalDate">Date</label>
+          <input type="date" id="modalDate" required />
+        </div>
+        <div class="field">
+          <label for="modalNote">Note (optional)</label>
+          <input type="text" id="modalNote" maxlength="255" placeholder="Add a short note" />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-ghost" id="txnModalCancel">Cancel</button>
+          <button type="submit" class="btn-solid" id="txnSubmitBtn">Add transaction</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- PDF export choice modal -->
+  <div class="modal-overlay" id="pdfModalOverlay">
+    <div class="modal small">
+      <h2>Download PDF</h2>
+      <p>Export exactly what's on screen right now, or your entire transaction history?</p>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="pdfExportFiltered">Current view</button>
+        <button class="btn-solid" id="pdfExportAll">Full history</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- generic confirm modal (delete transaction / clear history / delete account) -->
+  <div class="modal-overlay" id="confirmModalOverlay">
+    <div class="modal small">
+      <h2 id="confirmTitle">Are you sure?</h2>
+      <p id="confirmMessage"></p>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="confirmCancel">Cancel</button>
+        <button class="btn-danger" id="confirmOk">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <nav class="mobile-bottom-nav">
+    <button data-target="overview" title="Dashboard">⌂</button>
+    <button id="mobileSearchBtn" title="Search">⌕</button>
+    <button class="add-fab" id="mobileAddBtn" title="Add transaction">+</button>
+    <button data-target="charts" title="Reports">▤</button>
+    <button id="mobileMenuBtn" title="Menu">⋯</button>
+  </nav>
 
   <div class="toast" id="toast"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </body>
 </html>
