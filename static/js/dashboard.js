@@ -4,8 +4,11 @@
 let allTransactions = [];
 let modalSelectedType = "expense";
 let categoryChart = null;
-let trendChart = null;
+let monthlyBarChart = null;
+let cashflowChart = null;
 let confirmCallback = null;
+let cashflowMode = "income";
+let lastMonthlyData = {};
 
 const currency = (n) =>
   "₹" + Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -97,6 +100,16 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.target.id === "confirmModalOverlay") closeConfirm();
   });
 
+  // Cashflow toggle
+  document.querySelectorAll(".pill-btn[data-cashflow]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".pill-btn[data-cashflow]").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      cashflowMode = btn.dataset.cashflow;
+      renderCashflowChart(lastMonthlyData);
+    });
+  });
+
   // Mobile bottom nav extras
   document.getElementById("mobileSearchBtn").addEventListener("click", () => {
     document.getElementById("searchInput").scrollIntoView({ behavior: "smooth", block: "center" });
@@ -140,9 +153,14 @@ async function loadTransactions() {
 async function loadSummary() {
   const summary = await apiFetch("/api/summary");
   document.getElementById("balanceValue").textContent = currency(summary.balance);
+  document.getElementById("reportIncomeValue").textContent = currency(summary.total_income);
+  document.getElementById("reportExpenseValue").textContent = currency(summary.total_expense);
+  lastMonthlyData = summary.monthly;
+
   renderCategoryTiles(summary.by_category);
   renderCategoryChart(summary.by_category);
-  renderTrendChart(summary.monthly);
+  renderMonthlyBarChart(summary.monthly);
+  renderCashflowChart(summary.monthly);
 }
 
 async function logout() {
@@ -454,17 +472,32 @@ function escapeHtml(str) {
 // ---------------------------------------------------------------------------
 // Charts
 // ---------------------------------------------------------------------------
+const CATEGORY_PALETTE = ["#7c3aed", "#16a34a", "#dc2626", "#f59e0b", "#0ea5e9", "#8a5cae", "#3aa7a0"];
+
 function renderCategoryChart(byCategory) {
   const ctx = document.getElementById("categoryChart");
-  const labels = Object.keys(byCategory);
-  const values = Object.values(byCategory);
+  const entries = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
+  const labels = entries.map(([cat]) => cat);
+  const values = entries.map(([, amt]) => amt);
+  const total = values.reduce((s, v) => s + v, 0);
+
+  document.getElementById("donutTotalValue").textContent = currency(total);
 
   if (categoryChart) { categoryChart.destroy(); categoryChart = null; }
 
+  const legendList = document.getElementById("categoryLegendList");
   if (!labels.length) {
     ctx.getContext("2d").clearRect(0, 0, ctx.width, ctx.height);
+    legendList.innerHTML = '<li class="empty-state" style="padding:10px 0;">No expenses yet.</li>';
     return;
   }
+
+  legendList.innerHTML = entries.map(([cat, amt], i) => `
+    <li>
+      <span class="legend-name"><span class="legend-dot" style="background:${CATEGORY_PALETTE[i % CATEGORY_PALETTE.length]}"></span>${escapeHtml(cat)}</span>
+      <span class="legend-value">${currency(amt)}</span>
+    </li>
+  `).join("");
 
   categoryChart = new Chart(ctx, {
     type: "doughnut",
@@ -472,51 +505,89 @@ function renderCategoryChart(byCategory) {
       labels,
       datasets: [{
         data: values,
-        backgroundColor: ["#7c3aed", "#16a34a", "#dc2626", "#f59e0b", "#0ea5e9", "#8a5cae", "#3aa7a0"],
+        backgroundColor: CATEGORY_PALETTE,
         borderWidth: 0,
       }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } },
-        title: { display: true, text: "Spending by category", align: "start", font: { size: 13 } },
-      },
+      cutout: "72%",
+      plugins: { legend: { display: false } },
     },
   });
 }
 
-function renderTrendChart(monthly) {
-  const ctx = document.getElementById("trendChart");
+function renderMonthlyBarChart(monthly) {
+  const ctx = document.getElementById("monthlyBarChart");
   const labels = Object.keys(monthly).map(monthLabel);
   const income = Object.values(monthly).map((m) => m.income);
   const expense = Object.values(monthly).map((m) => m.expense);
 
-  if (trendChart) { trendChart.destroy(); trendChart = null; }
+  if (monthlyBarChart) { monthlyBarChart.destroy(); monthlyBarChart = null; }
 
   if (!labels.length) {
     ctx.getContext("2d").clearRect(0, 0, ctx.width, ctx.height);
     return;
   }
 
-  trendChart = new Chart(ctx, {
-    type: "line",
+  monthlyBarChart = new Chart(ctx, {
+    type: "bar",
     data: {
       labels,
       datasets: [
-        { label: "Income", data: income, borderColor: "#16a34a", backgroundColor: "rgba(22,163,74,0.12)", fill: true, tension: 0.35, pointRadius: 3 },
-        { label: "Expense", data: expense, borderColor: "#dc2626", backgroundColor: "rgba(220,38,38,0.12)", fill: true, tension: 0.35, pointRadius: 3 },
+        { label: "Income", data: income, backgroundColor: "#16a34a", borderRadius: 4, maxBarThickness: 18 },
+        { label: "Expense", data: expense, backgroundColor: "#dc2626", borderRadius: 4, maxBarThickness: 18 },
       ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } },
-        title: { display: true, text: "Last 6 months", align: "start", font: { size: 13 } },
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: "#eeecf7" } },
+        x: { grid: { display: false } },
       },
-      scales: { y: { beginAtZero: true } },
+    },
+  });
+}
+
+function renderCashflowChart(monthly) {
+  const ctx = document.getElementById("cashflowChart");
+  const labels = Object.keys(monthly).map(monthLabel);
+  const values = Object.values(monthly).map((m) => m[cashflowMode]);
+  const color = cashflowMode === "income" ? "#16a34a" : "#dc2626";
+  const bg = cashflowMode === "income" ? "rgba(22,163,74,0.12)" : "rgba(220,38,38,0.12)";
+
+  if (cashflowChart) { cashflowChart.destroy(); cashflowChart = null; }
+
+  if (!labels.length) {
+    ctx.getContext("2d").clearRect(0, 0, ctx.width, ctx.height);
+    return;
+  }
+
+  cashflowChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: cashflowMode === "income" ? "Income" : "Expense",
+        data: values,
+        borderColor: color,
+        backgroundColor: bg,
+        fill: true,
+        tension: 0.35,
+        pointRadius: 3,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: "#eeecf7" } },
+        x: { grid: { display: false } },
+      },
     },
   });
 }
