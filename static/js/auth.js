@@ -1,5 +1,5 @@
 // Shared submit handler for the login and signup forms.
-function setupAuthForm({ formId, endpoint, submitId, submitLabel, onSuccess }) {
+function setupAuthForm({ formId, endpoint, submitId, submitLabel, onSuccess, validate }) {
   const form = document.getElementById(formId);
   const errorBanner = document.getElementById("errorBanner");
   const submitBtn = document.getElementById(submitId);
@@ -9,6 +9,18 @@ function setupAuthForm({ formId, endpoint, submitId, submitLabel, onSuccess }) {
     errorBanner.classList.remove("show");
 
     const payload = Object.fromEntries(new FormData(form).entries());
+
+    // Optional client-side check (e.g. minimum age) so the person gets
+    // instant feedback without a round trip — the server still re-checks
+    // everything, so this is a convenience, not the source of truth.
+    if (typeof validate === "function") {
+      const validationError = validate(payload);
+      if (validationError) {
+        errorBanner.textContent = validationError;
+        errorBanner.classList.add("show");
+        return;
+      }
+    }
 
     submitBtn.disabled = true;
     submitBtn.textContent = "Please wait…";

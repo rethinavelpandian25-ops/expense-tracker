@@ -1,9 +1,20 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="purple" data-appearance="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sign up — Ledger</title>
+  <script>
+    (function () {
+      try {
+        var mode = localStorage.getItem("ledger-appearance") || "system";
+        var resolved = mode === "system"
+          ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+          : mode;
+        document.documentElement.setAttribute("data-appearance", resolved);
+      } catch (err) { /* localStorage unavailable — default light stands */ }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
@@ -30,6 +41,11 @@
           <input type="email" id="email" name="email" autocomplete="email" required />
         </div>
         <div class="field">
+          <label for="dob">Date of birth</label>
+          <input type="date" id="dob" name="dob" autocomplete="bday" required />
+          <span class="field-hint">You must be {{ min_age }} or older to use Ledger.</span>
+        </div>
+        <div class="field">
           <label for="password">Password</label>
           <input type="password" id="password" name="password" autocomplete="new-password" minlength="6" required />
         </div>
@@ -42,11 +58,43 @@
 
   <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
   <script>
+    // Keep the date picker from offering obviously-invalid dates.
+    (function () {
+      const dobInput = document.getElementById("dob");
+      const pad = (n) => String(n).padStart(2, "0");
+      const today = new Date();
+      dobInput.max = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+      dobInput.min = `${today.getFullYear() - 120}-01-01`;
+    })();
+
+    const MIN_AGE = {{ min_age }};
+
+    function ageFromDob(dobStr) {
+      const dob = new Date(dobStr + "T00:00:00");
+      if (isNaN(dob.getTime())) return null;
+      const today = new Date();
+      let age = today.getFullYear() - dob.getFullYear();
+      const hasHadBirthday =
+        today.getMonth() > dob.getMonth() ||
+        (today.getMonth() === dob.getMonth() && today.getDate() >= dob.getDate());
+      if (!hasHadBirthday) age--;
+      return age;
+    }
+
     setupAuthForm({
       formId: "signupForm",
       endpoint: "/api/signup",
       submitId: "submitBtn",
       submitLabel: "Create account",
+      validate: (payload) => {
+        if (!payload.dob) return "Date of birth is required.";
+        const dob = new Date(payload.dob + "T00:00:00");
+        if (isNaN(dob.getTime())) return "Enter a valid date of birth.";
+        if (dob > new Date()) return "Date of birth can't be in the future.";
+        const age = ageFromDob(payload.dob);
+        if (age < MIN_AGE) return `You must be at least ${MIN_AGE} years old to create an account.`;
+        return null;
+      },
       onSuccess: () => { window.location.href = "/dashboard"; }
     });
   </script>

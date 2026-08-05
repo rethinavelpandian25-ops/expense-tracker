@@ -9,6 +9,13 @@ let cashflowChart = null;
 let confirmCallback = null;
 let cashflowMode = "income";
 let lastMonthlyData = {};
+let lastByCategory = {};
+let systemAppearanceMedia = null;
+
+// Populated server-side (see the inline script at the bottom of
+// dashboard.html) so the page already knows the signed-in user without an
+// extra round trip on load.
+const account = window.LEDGER_USER || { username: "", email: "", profile_pic: null, theme: "purple", appearance: "system" };
 
 const currency = (n) =>
   "₹" + Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -27,17 +34,24 @@ const monthLabel = (ymKey) => {
   return new Date(Number(y), Number(m) - 1).toLocaleString("default", { month: "short", year: "numeric" });
 };
 
+// Reads a live CSS custom property off <html> so chart colors always match
+// the current theme + light/dark appearance, instead of being baked in.
+const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
 // ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
-  // Section nav (sidebar + mobile bottom nav share the same data-target links)
+  // Section nav — sidebar links, the mobile bottom nav, and the avatar /
+  // profile-summary shortcuts all share the same data-target mechanism.
   document.querySelectorAll("[data-target]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const target = document.getElementById(btn.dataset.target);
       if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
-      document.querySelectorAll(".nav-link").forEach((l) => l.classList.remove("active"));
-      document.querySelectorAll(`.nav-link[data-target="${btn.dataset.target}"]`).forEach((l) => l.classList.add("active"));
+      document.querySelectorAll(".nav-link, .mobile-bottom-nav button[data-target]").forEach((l) => l.classList.remove("active"));
+      document.querySelectorAll(`[data-target="${btn.dataset.target}"]`).forEach((l) => {
+        if (l.classList.contains("nav-link") || l.closest(".mobile-bottom-nav")) l.classList.add("active");
+      });
     });
   });
 
@@ -46,23 +60,8 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("filterMonth").addEventListener("change", renderTransactions);
   document.getElementById("searchInput").addEventListener("input", renderTransactions);
 
-  // Logout
-  document.getElementById("logoutBtn").addEventListener("click", logout);
-  document.getElementById("dropdownLogout").addEventListener("click", logout);
-
-  // Delete account
-  document.getElementById("deleteAccountBtn").addEventListener("click", confirmDeleteAccount);
-  document.getElementById("dropdownDeleteAccount").addEventListener("click", confirmDeleteAccount);
-
   // Clear history
   document.getElementById("clearHistoryBtn").addEventListener("click", confirmClearHistory);
-
-  // Avatar dropdown
-  document.getElementById("avatarBtn").addEventListener("click", (e) => {
-    e.stopPropagation();
-    document.getElementById("avatarDropdown").classList.toggle("show");
-  });
-  document.addEventListener("click", () => document.getElementById("avatarDropdown").classList.remove("show"));
 
   // Add / edit transaction modal
   document.getElementById("addTxnOpenBtn").addEventListener("click", () => openTxnModal("add"));
@@ -80,16 +79,18 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // PDF export
+  // PDF export — one entry point (the balance card button); it opens a
+  // modal offering the export scope rather than two separate buttons.
   document.getElementById("downloadPdfBtn").addEventListener("click", openPdfModal);
-  document.getElementById("downloadPdfBtn2").addEventListener("click", openPdfModal);
   document.getElementById("pdfExportFiltered").addEventListener("click", () => { exportPdf(getFilteredTransactions(), "Current view"); closePdfModal(); });
   document.getElementById("pdfExportAll").addEventListener("click", () => { exportPdf(allTransactions, "Full history"); closePdfModal(); });
   document.getElementById("pdfModalOverlay").addEventListener("click", (e) => {
     if (e.target.id === "pdfModalOverlay") closePdfModal();
   });
 
-  // Generic confirm modal
+  // Generic confirm modal — used for delete transaction, clear history,
+  // log out, and delete account, so every destructive/session-ending
+  // action gets the same "are you sure?" gate.
   document.getElementById("confirmCancel").addEventListener("click", closeConfirm);
   document.getElementById("confirmOk").addEventListener("click", async () => {
     const cb = confirmCallback;
@@ -112,14 +113,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Mobile bottom nav extras
   document.getElementById("mobileSearchBtn").addEventListener("click", () => {
-    document.getElementById("searchInput").scrollIntoView({ behavior: "smooth", block: "center" });
+    document.getElementById("history").scrollIntoView({ behavior: "smooth", block: "start" });
     document.getElementById("searchInput").focus();
   });
-  document.getElementById("mobileMenuBtn").addEventListener("click", (e) => {
-    e.stopPropagation();
-    document.getElementById("avatarDropdown").classList.toggle("show");
-  });
 
+  initSettings();
   loadEverything();
 });
 
@@ -151,16 +149,17 @@ async function loadTransactions() {
 }
 
 async function loadSummary() {
-  const summary = await apiFetch("/api/summary");
-  document.getElementById("balanceValue").textContent = currency(summary.balance);
-  document.getElementById("reportIncomeValue").textContent = currency(summary.total_income);
-  document.getElementById("reportExpenseValue").textContent = currency(summary.total_expense);
-  lastMonthlyData = summary.monthly;
+  const summaryData = await apiFetch("/api/summary");
+  document.getElementById("balanceValue").textContent = currency(summaryData.balance);
+  document.getElementById("reportIncomeValue").textContent = currency(summaryData.total_income);
+  document.getElementById("reportExpenseValue").textContent = currency(summaryData.total_expense);
+  lastMonthlyData = summaryData.monthly;
+  lastByCategory = summaryData.by_category;
 
-  renderCategoryTiles(summary.by_category);
-  renderCategoryChart(summary.by_category);
-  renderMonthlyBarChart(summary.monthly);
-  renderCashflowChart(summary.monthly);
+  renderCategoryTiles(lastByCategory);
+  renderCategoryChart(lastByCategory);
+  renderMonthlyBarChart(lastMonthlyData);
+  renderCashflowChart(lastMonthlyData);
 }
 
 async function logout() {
@@ -169,6 +168,10 @@ async function logout() {
   } finally {
     window.location.href = "/login";
   }
+}
+
+function confirmLogout() {
+  openConfirm("Log out?", "You'll need to sign in again to see your data.", logout);
 }
 
 // ---------------------------------------------------------------------------
@@ -364,7 +367,7 @@ function exportPdf(rows, scopeLabel) {
 // ---------------------------------------------------------------------------
 function renderCategoryTiles(byCategory) {
   const wrap = document.getElementById("categoryTiles");
-  const palette = ["#7c3aed", "#16a34a", "#f59e0b", "#0ea5e9", "#e11d48", "#8b5cf6"];
+  const palette = tilePalette();
   const entries = Object.entries(byCategory).sort((a, b) => b[1] - a[1]).slice(0, 3);
 
   if (!entries.length) {
@@ -470,12 +473,21 @@ function escapeHtml(str) {
 }
 
 // ---------------------------------------------------------------------------
-// Charts
+// Charts — colors are read live from CSS variables so they always match the
+// current theme + light/dark appearance (see refreshThemedVisuals below,
+// called whenever either changes).
 // ---------------------------------------------------------------------------
-const CATEGORY_PALETTE = ["#7c3aed", "#16a34a", "#dc2626", "#f59e0b", "#0ea5e9", "#8a5cae", "#3aa7a0"];
+function tilePalette() {
+  return [cssVar("--primary"), "#16a34a", "#f59e0b", "#0ea5e9", "#e11d48", "#8b5cf6"];
+}
+
+function categoryPalette() {
+  return [cssVar("--primary"), "#16a34a", "#dc2626", "#f59e0b", "#0ea5e9", "#8a5cae", "#3aa7a0"];
+}
 
 function renderCategoryChart(byCategory) {
   const ctx = document.getElementById("categoryChart");
+  const palette = categoryPalette();
   const entries = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
   const labels = entries.map(([cat]) => cat);
   const values = entries.map(([, amt]) => amt);
@@ -494,7 +506,7 @@ function renderCategoryChart(byCategory) {
 
   legendList.innerHTML = entries.map(([cat, amt], i) => `
     <li>
-      <span class="legend-name"><span class="legend-dot" style="background:${CATEGORY_PALETTE[i % CATEGORY_PALETTE.length]}"></span>${escapeHtml(cat)}</span>
+      <span class="legend-name"><span class="legend-dot" style="background:${palette[i % palette.length]}"></span>${escapeHtml(cat)}</span>
       <span class="legend-value">${currency(amt)}</span>
     </li>
   `).join("");
@@ -505,7 +517,7 @@ function renderCategoryChart(byCategory) {
       labels,
       datasets: [{
         data: values,
-        backgroundColor: CATEGORY_PALETTE,
+        backgroundColor: palette,
         borderWidth: 0,
       }],
     },
@@ -523,6 +535,8 @@ function renderMonthlyBarChart(monthly) {
   const labels = Object.keys(monthly).map(monthLabel);
   const income = Object.values(monthly).map((m) => m.income);
   const expense = Object.values(monthly).map((m) => m.expense);
+  const gridColor = cssVar("--border");
+  const tickColor = cssVar("--muted");
 
   if (monthlyBarChart) { monthlyBarChart.destroy(); monthlyBarChart = null; }
 
@@ -536,8 +550,8 @@ function renderMonthlyBarChart(monthly) {
     data: {
       labels,
       datasets: [
-        { label: "Income", data: income, backgroundColor: "#16a34a", borderRadius: 4, maxBarThickness: 18 },
-        { label: "Expense", data: expense, backgroundColor: "#dc2626", borderRadius: 4, maxBarThickness: 18 },
+        { label: "Income", data: income, backgroundColor: cssVar("--income"), borderRadius: 4, maxBarThickness: 18 },
+        { label: "Expense", data: expense, backgroundColor: cssVar("--expense"), borderRadius: 4, maxBarThickness: 18 },
       ],
     },
     options: {
@@ -545,8 +559,8 @@ function renderMonthlyBarChart(monthly) {
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        y: { beginAtZero: true, grid: { color: "#eeecf7" } },
-        x: { grid: { display: false } },
+        y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor } },
+        x: { grid: { display: false }, ticks: { color: tickColor } },
       },
     },
   });
@@ -556,8 +570,10 @@ function renderCashflowChart(monthly) {
   const ctx = document.getElementById("cashflowChart");
   const labels = Object.keys(monthly).map(monthLabel);
   const values = Object.values(monthly).map((m) => m[cashflowMode]);
-  const color = cashflowMode === "income" ? "#16a34a" : "#dc2626";
-  const bg = cashflowMode === "income" ? "rgba(22,163,74,0.12)" : "rgba(220,38,38,0.12)";
+  const color = cashflowMode === "income" ? cssVar("--income") : cssVar("--expense");
+  const bg = `color-mix(in srgb, ${color} 14%, transparent)`;
+  const gridColor = cssVar("--border");
+  const tickColor = cssVar("--muted");
 
   if (cashflowChart) { cashflowChart.destroy(); cashflowChart = null; }
 
@@ -585,11 +601,21 @@ function renderCashflowChart(monthly) {
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        y: { beginAtZero: true, grid: { color: "#eeecf7" } },
-        x: { grid: { display: false } },
+        y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor } },
+        x: { grid: { display: false }, ticks: { color: tickColor } },
       },
     },
   });
+}
+
+// Re-draws every chart + tile with the colors the newly-applied theme or
+// appearance resolves to. Cheap to call — it just replays the last summary
+// response through the same render functions.
+function refreshThemedVisuals() {
+  renderCategoryTiles(lastByCategory);
+  renderCategoryChart(lastByCategory);
+  renderMonthlyBarChart(lastMonthlyData);
+  renderCashflowChart(lastMonthlyData);
 }
 
 // ---------------------------------------------------------------------------
@@ -602,4 +628,231 @@ function showToast(message) {
   toast.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
+}
+
+// ---------------------------------------------------------------------------
+// Settings — profile photo, username, password, theme, appearance, account
+// ---------------------------------------------------------------------------
+function initSettings() {
+  renderAvatars();
+  document.getElementById("settingsEmail").textContent = account.email;
+  document.getElementById("sidebarUsername").textContent = account.username;
+  document.getElementById("usernameInput").value = account.username;
+
+  // Logout / delete account now live only in Settings, each behind the
+  // same confirm modal used for other destructive actions.
+  document.getElementById("settingsLogoutBtn").addEventListener("click", confirmLogout);
+  document.getElementById("settingsDeleteBtn").addEventListener("click", confirmDeleteAccount);
+
+  // Profile photo
+  document.getElementById("profilePicInput").addEventListener("change", handleProfilePicChange);
+  document.getElementById("removePhotoBtn").addEventListener("click", handleRemovePhoto);
+
+  // Username
+  document.getElementById("usernameForm").addEventListener("submit", handleUsernameSubmit);
+
+  // Password
+  document.getElementById("passwordForm").addEventListener("submit", handlePasswordSubmit);
+
+  // Theme swatches
+  const swatches = document.querySelectorAll(".theme-swatch");
+  swatches.forEach((btn) => {
+    if (btn.dataset.theme === account.theme) btn.classList.add("active");
+    btn.addEventListener("click", () => handleThemeChange(btn.dataset.theme));
+  });
+
+  // Appearance toggle
+  const appearanceButtons = document.querySelectorAll("#appearanceToggle button");
+  appearanceButtons.forEach((btn) => {
+    if (btn.dataset.appearanceMode === account.appearance) btn.classList.add("active");
+    btn.addEventListener("click", () => handleAppearanceChange(btn.dataset.appearanceMode));
+  });
+
+  watchSystemAppearance(account.appearance);
+}
+
+function renderAvatars() {
+  [
+    document.getElementById("avatarBtn"),
+    document.getElementById("sidebarAvatar"),
+    document.getElementById("settingsAvatar"),
+  ].forEach((el) => {
+    if (!el) return;
+    if (account.profile_pic) {
+      el.innerHTML = `<img src="${account.profile_pic}" alt="Profile photo" />`;
+    } else {
+      el.textContent = (account.username || "?").charAt(0).toUpperCase();
+    }
+  });
+}
+
+function readAndCompressImage(file, maxDim = 480, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/")) {
+      reject(new Error("Please choose an image file."));
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      reject(new Error("That photo is too large — please pick one under 8 MB."));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round(height * (maxDim / width));
+            width = maxDim;
+          } else {
+            width = Math.round(width * (maxDim / height));
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        const mime = file.type === "image/png" ? "image/png" : "image/jpeg";
+        resolve(canvas.toDataURL(mime, quality));
+      };
+      img.onerror = () => reject(new Error("Couldn't read that image."));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error("Couldn't read that image."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleProfilePicChange(e) {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+
+  try {
+    const dataUrl = await readAndCompressImage(file);
+    const res = await apiFetch("/api/account/profile-picture", { method: "PUT", body: JSON.stringify({ image: dataUrl }) });
+    account.profile_pic = res.profile_pic;
+    renderAvatars();
+    showToast("Profile photo updated.");
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function handleRemovePhoto() {
+  if (!account.profile_pic) {
+    showToast("No photo to remove.");
+    return;
+  }
+  try {
+    await apiFetch("/api/account/profile-picture", { method: "DELETE" });
+    account.profile_pic = null;
+    renderAvatars();
+    showToast("Profile photo removed.");
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function handleUsernameSubmit(e) {
+  e.preventDefault();
+  const input = document.getElementById("usernameInput");
+  const newUsername = input.value.trim();
+  if (!newUsername) return;
+
+  try {
+    const res = await apiFetch("/api/account/username", { method: "PUT", body: JSON.stringify({ username: newUsername }) });
+    account.username = res.username;
+    document.getElementById("sidebarUsername").textContent = account.username;
+    renderAvatars();
+    showToast("Username updated.");
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function handlePasswordSubmit(e) {
+  e.preventDefault();
+  const current = document.getElementById("currentPasswordInput");
+  const next = document.getElementById("newPasswordInput");
+  const confirmInput = document.getElementById("confirmPasswordInput");
+
+  if (next.value !== confirmInput.value) {
+    showToast("New passwords don't match.");
+    return;
+  }
+  if (next.value.length < 6) {
+    showToast("New password must be at least 6 characters.");
+    return;
+  }
+
+  try {
+    await apiFetch("/api/account/password", {
+      method: "PUT",
+      body: JSON.stringify({ current_password: current.value, new_password: next.value }),
+    });
+    document.getElementById("passwordForm").reset();
+    showToast("Password updated.");
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function handleThemeChange(theme) {
+  if (theme === account.theme) return;
+  account.theme = theme;
+  document.documentElement.setAttribute("data-theme", theme);
+  document.querySelectorAll(".theme-swatch").forEach((b) => b.classList.toggle("active", b.dataset.theme === theme));
+  refreshThemedVisuals();
+  try {
+    await apiFetch("/api/account/preferences", { method: "PUT", body: JSON.stringify({ theme }) });
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+function resolveAppearance(mode) {
+  if (mode !== "system") return mode;
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyAppearance(mode) {
+  const resolved = resolveAppearance(mode);
+  document.documentElement.setAttribute("data-appearance", resolved);
+  document.documentElement.setAttribute("data-appearance-mode", mode);
+  try { localStorage.setItem("ledger-appearance", mode); } catch (err) { /* ignore */ }
+}
+
+function watchSystemAppearance(mode) {
+  if (!window.matchMedia) return;
+  if (systemAppearanceMedia) {
+    systemAppearanceMedia.removeEventListener("change", handleSystemAppearanceChange);
+    systemAppearanceMedia = null;
+  }
+  if (mode === "system") {
+    systemAppearanceMedia = window.matchMedia("(prefers-color-scheme: dark)");
+    systemAppearanceMedia.addEventListener("change", handleSystemAppearanceChange);
+  }
+}
+
+function handleSystemAppearanceChange() {
+  applyAppearance("system");
+  refreshThemedVisuals();
+}
+
+async function handleAppearanceChange(mode) {
+  if (mode === account.appearance) return;
+  account.appearance = mode;
+  applyAppearance(mode);
+  document.querySelectorAll("#appearanceToggle button").forEach((b) => b.classList.toggle("active", b.dataset.appearanceMode === mode));
+  watchSystemAppearance(mode);
+  refreshThemedVisuals();
+  try {
+    await apiFetch("/api/account/preferences", { method: "PUT", body: JSON.stringify({ appearance: mode }) });
+  } catch (err) {
+    showToast(err.message);
+  }
 }

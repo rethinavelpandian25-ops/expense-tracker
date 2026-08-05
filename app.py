@@ -21,6 +21,10 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 # everything over HTTPS — so cookies can be marked Secure there. Left off
 # for local http://localhost development.
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("RENDER", "").lower() == "true"
+# A profile photo is stored as a base64 data URL on the user row (see notes
+# on PROFILE_PIC_MAX_CHARS below), so the JSON body for that one endpoint
+# needs a higher limit than Flask's default.
+app.config["MAX_CONTENT_LENGTH"] = 3 * 1024 * 1024  # 3 MB
 
 # Render provides DATABASE_URL for its managed Postgres. Render's URL starts
 # with "postgres://" but SQLAlchemy 1.4+ requires "postgresql://".
@@ -35,6 +39,24 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login_page"
 
+MIN_SIGNUP_AGE = 18
+
+# Themes and appearance modes a user is allowed to pick in Settings. Kept in
+# one place so the API and the seed defaults below always agree with what
+# static/js/dashboard.js offers as swatches.
+VALID_THEMES = {"purple", "blue", "green", "rose", "amber", "teal", "graphite"}
+VALID_APPEARANCES = {"light", "dark", "system"}
+DEFAULT_THEME = "purple"
+DEFAULT_APPEARANCE = "system"
+
+# Profile photos are stored inline as base64 data URLs on the user row
+# instead of on disk — Render's free-tier filesystem is ephemeral and wipes
+# any uploaded files on every deploy/restart, which would silently break
+# photos. Postgres has no such issue, so the DB is the durable option here.
+# 2_000_000 base64 characters is roughly a 1.4 MB source image, plenty for
+# an avatar-sized photo while keeping row size sane.
+PROFILE_PIC_MAX_CHARS = 2_000_000
+
 
 # ---------------------------------------------------------------------------
 # Models
@@ -44,6 +66,10 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
+    dob = db.Column(db.Date, nullable=True)
+    profile_pic = db.Column(db.Text, nullable=True)  # base64 data URL, or NULL
+    theme = db.Column(db.String(20), nullable=False, default=DEFAULT_THEME)
+    appearance = db.Column(db.String(10), nullable=False, default=DEFAULT_APPEARANCE)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     transactions = db.relationship(
@@ -55,6 +81,15 @@ class User(db.Model, UserMixin):
 
     def check_password(self, raw_password):
         return check_password_hash(self.password_hash, raw_password)
+
+    def to_account_dict(self):
+        return {
+            "username": self.username,
+            "email": self.email,
+            "profile_pic": self.profile_pic,
+            "theme": self.theme,
+            "appearance": self.appearance,
+        }
 
 
 class Transaction(db.Model):
@@ -83,6 +118,11 @@ def load_user(user_id):
     return db.session.get(User, int(user_id))
 
 
+def calculate_age(born, today=None):
+    today = today or date.today()
+    return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+
+
 # ---------------------------------------------------------------------------
 # Page routes
 # ---------------------------------------------------------------------------
@@ -104,13 +144,20 @@ def login_page():
 def signup_page():
     if current_user.is_authenticated:
         return redirect(url_for("dashboard"))
-    return render_template("signup.html")
+    return render_template("signup.html", min_age=MIN_SIGNUP_AGE)
 
 
 @app.route("/dashboard", methods=["GET"])
 @login_required
 def dashboard():
-    return render_template("dashboard.html", username=current_user.username)
+    return render_template(
+        "dashboard.html",
+        username=current_user.username,
+        email=current_user.email,
+        profile_pic=current_user.profile_pic,
+        theme=current_user.theme or DEFAULT_THEME,
+        appearance=current_user.appearance or DEFAULT_APPEARANCE,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -122,17 +169,34 @@ def api_signup():
     username = (data.get("username") or "").strip()
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
+    dob_str = (data.get("dob") or "").strip()
 
-    if not username or not email or not password:
+    if not username or not email or not password or not dob_str:
         return jsonify({"error": "All fields are required."}), 400
     if len(password) < 6:
         return jsonify({"error": "Password must be at least 6 characters."}), 400
+
+    try:
+        dob = datetime.strptime(dob_str, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"error": "Date of birth must be a valid date."}), 400
+
+    today = date.today()
+    if dob > today:
+        return jsonify({"error": "Date of birth can't be in the future."}), 400
+
+    age = calculate_age(dob, today)
+    if age < MIN_SIGNUP_AGE:
+        return jsonify({
+            "error": f"You must be at least {MIN_SIGNUP_AGE} years old to create an account."
+        }), 400
+
     if User.query.filter_by(username=username).first():
         return jsonify({"error": "Username already taken."}), 409
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already registered."}), 409
 
-    user = User(username=username, email=email)
+    user = User(username=username, email=email, dob=dob)
     user.set_password(password)
     db.session.add(user)
     db.session.commit()
@@ -175,6 +239,98 @@ def delete_account():
     db.session.delete(user)  # cascade="all, delete-orphan" removes their transactions too
     db.session.commit()
     return jsonify({"message": "Account deleted."}), 200
+
+
+# ---------------------------------------------------------------------------
+# Account / settings API
+# ---------------------------------------------------------------------------
+@app.route("/api/account", methods=["GET"])
+@login_required
+def get_account():
+    return jsonify(current_user.to_account_dict())
+
+
+@app.route("/api/account/username", methods=["PUT"])
+@login_required
+def update_username():
+    data = request.get_json(silent=True) or {}
+    new_username = (data.get("username") or "").strip()
+
+    if not new_username:
+        return jsonify({"error": "Username is required."}), 400
+    if len(new_username) > 80:
+        return jsonify({"error": "Username must be 80 characters or fewer."}), 400
+    if new_username != current_user.username and User.query.filter_by(username=new_username).first():
+        return jsonify({"error": "Username already taken."}), 409
+
+    current_user.username = new_username
+    db.session.commit()
+    return jsonify({"message": "Username updated.", "username": current_user.username}), 200
+
+
+@app.route("/api/account/password", methods=["PUT"])
+@login_required
+def update_password():
+    data = request.get_json(silent=True) or {}
+    current_password = data.get("current_password") or ""
+    new_password = data.get("new_password") or ""
+
+    if not current_user.check_password(current_password):
+        return jsonify({"error": "Current password is incorrect."}), 401
+    if len(new_password) < 6:
+        return jsonify({"error": "New password must be at least 6 characters."}), 400
+
+    current_user.set_password(new_password)
+    db.session.commit()
+    return jsonify({"message": "Password updated."}), 200
+
+
+@app.route("/api/account/profile-picture", methods=["PUT"])
+@login_required
+def update_profile_picture():
+    data = request.get_json(silent=True) or {}
+    image_data = data.get("image") or ""
+
+    if not image_data.startswith("data:image/"):
+        return jsonify({"error": "Please upload a valid image file."}), 400
+    if len(image_data) > PROFILE_PIC_MAX_CHARS:
+        return jsonify({"error": "That photo is too large. Please choose a smaller image."}), 400
+
+    current_user.profile_pic = image_data
+    db.session.commit()
+    return jsonify({"message": "Profile photo updated.", "profile_pic": current_user.profile_pic}), 200
+
+
+@app.route("/api/account/profile-picture", methods=["DELETE"])
+@login_required
+def remove_profile_picture():
+    current_user.profile_pic = None
+    db.session.commit()
+    return jsonify({"message": "Profile photo removed."}), 200
+
+
+@app.route("/api/account/preferences", methods=["PUT"])
+@login_required
+def update_preferences():
+    data = request.get_json(silent=True) or {}
+    theme = data.get("theme")
+    appearance = data.get("appearance")
+
+    if theme is not None:
+        if theme not in VALID_THEMES:
+            return jsonify({"error": "Unknown theme."}), 400
+        current_user.theme = theme
+    if appearance is not None:
+        if appearance not in VALID_APPEARANCES:
+            return jsonify({"error": "Unknown appearance mode."}), 400
+        current_user.appearance = appearance
+
+    db.session.commit()
+    return jsonify({
+        "message": "Preferences saved.",
+        "theme": current_user.theme,
+        "appearance": current_user.appearance,
+    }), 200
 
 
 # ---------------------------------------------------------------------------
@@ -337,6 +493,11 @@ def unauthorized():
     if request.path.startswith("/api/"):
         return jsonify({"error": "Please log in."}), 401
     return redirect(url_for("login_page"))
+
+
+@app.errorhandler(413)
+def too_large(_e):
+    return jsonify({"error": "That upload is too large."}), 413
 
 
 with app.app_context():

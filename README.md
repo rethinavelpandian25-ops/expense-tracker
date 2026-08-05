@@ -11,11 +11,40 @@ vanilla HTML/CSS/JS frontend, Chart.js for charts, PostgreSQL on Render.
 ## Features
 
 - Sign up / log in / log out (passwords hashed, never stored in plain text)
-- Add, view, and delete income/expense transactions with category, amount, date, note
+- Sign-up asks for date of birth and only creates the account if the
+  person is 18 or older (checked in the browser for instant feedback, and
+  re-checked on the server since that's the actual source of truth)
+- Add, view, edit, and delete income/expense transactions with category,
+  amount, date, note
 - Dashboard with balance, total income, total expense
-- Category breakdown chart (doughnut) and 6-month income vs. expense trend (bar chart)
-- Filter history by type and month
-- Fully responsive — sidebar nav on desktop, top bar + stacked cards on mobile
+- Category breakdown chart (doughnut) and 6-month income vs. expense trend
+  (bar chart), plus a cashflow line chart
+- Filter history by type and month, free-text search across category/note/amount
+- One download button that exports a PDF (current filtered view or full
+  history) — this used to live in two places and now lives in one
+- **Settings page** — its own section in the nav, holding everything about
+  the signed-in person's account:
+  - Upload/remove a profile photo (shown as the round avatar everywhere);
+    the photo is resized and compressed in the browser before it's ever
+    sent, so uploads stay small
+  - Change username or password
+  - Pick an accent theme (purple by default, plus blue/green/rose/amber/teal/graphite)
+  - Switch appearance between light, dark, or system (system is the
+    default, and it live-updates if the OS theme changes while the tab is
+    open)
+  - Log out and delete account — both now ask for confirmation before
+    doing anything irreversible, same as the other destructive actions
+    (deleting a transaction, clearing history)
+- Theme and appearance choices are saved per-account and re-applied on
+  every future login, on any device, with no flash of the wrong theme on
+  load
+- Icons on every main nav item (Dashboard, Transactions, Reports, Settings),
+  desktop sidebar and mobile bottom bar alike
+- Fully responsive — sidebar nav on desktop, top bar + stacked cards on
+  mobile; the Reports page in particular got a pass to fix cramped/overflowing
+  chart cards on small screens
+- Subtle animations throughout (section transitions, modal entrances, hover
+  states) that respect `prefers-reduced-motion`
 - Each user's data is isolated — user A can never see user B's transactions
 
 ## Project structure
@@ -27,10 +56,10 @@ expense-tracker/
 ├── render.yaml             # Render deploy config (web service + Postgres)
 ├── .env.example
 ├── static/
-│   ├── css/style.css
+│   ├── css/style.css       # design tokens, theme + dark-mode variables, layout
 │   └── js/
 │       ├── auth.js         # login/signup form logic
-│       └── dashboard.js    # dashboard logic, charts, API calls
+│       └── dashboard.js    # dashboard logic, settings, theming, charts, API calls
 └── templates/
     ├── login.html
     ├── signup.html
@@ -66,6 +95,13 @@ Open **http://localhost:5000** — it will redirect you to the login page.
 Sign up for an account, and you're in. Locally, with no `DATABASE_URL`
 set, it automatically uses a SQLite file (`expenses.db`) so you don't
 need Postgres installed to develop.
+
+> **Already had `expenses.db` from before this update?** Delete it (or
+> point `DATABASE_URL` at a fresh database) before running the new
+> `app.py`. The User table picked up new columns (date of birth, profile
+> photo, theme, appearance) and there's no migration system yet — see
+> "Known simplifications" below — so `db.create_all()` won't retrofit
+> them onto an existing table.
 
 ## 2. Push to GitHub
 
@@ -112,6 +148,12 @@ Either way, once it's live, Render gives you a public URL like
 > of inactivity and take ~30–50 seconds to wake up on the next visit.
 > Mention this if you're demoing it live, so a slow first load doesn't
 > look like a bug.
+>
+> **Profile photos on the free tier:** photos are stored as base64 text
+> on the user's database row (not as files on disk), specifically because
+> Render's free filesystem is wiped on every deploy/restart. Keep this in
+> mind if you ever move to storing larger files — you'd want S3/Cloud
+> Storage instead of the database at that point.
 
 ## Known simplifications (worth knowing for an interview)
 
@@ -123,3 +165,5 @@ Being able to talk about what you'd add next is itself a good signal:
 - No database migrations — schema changes currently require recreating
   tables; a real project would add `Flask-Migrate`
 - No rate limiting on login/signup endpoints
+- No email verification, so the age check at signup relies on the date
+  of birth the person enters — there's no way to independently verify it

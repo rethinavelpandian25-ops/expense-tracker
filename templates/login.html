@@ -1,9 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="purple" data-appearance="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Log in — Ledger</title>
+  <script>
+    // Guest pages (login/signup) aren't tied to an account yet, but if this
+    // browser has logged into Ledger before, match its last appearance
+    // choice so switching between tabs doesn't feel jarring.
+    (function () {
+      try {
+        var mode = localStorage.getItem("ledger-appearance") || "system";
+        var resolved = mode === "system"
+          ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+          : mode;
+        document.documentElement.setAttribute("data-appearance", resolved);
+      } catch (err) { /* localStorage unavailable — default light stands */ }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
