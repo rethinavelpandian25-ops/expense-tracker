@@ -8,7 +8,7 @@ from flask_login import (
 )
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import extract
+from sqlalchemy import extract, inspect, text
 
 # ---------------------------------------------------------------------------
 # App / DB setup
@@ -500,8 +500,40 @@ def too_large(_e):
     return jsonify({"error": "That upload is too large."}), 413
 
 
+def run_startup_migrations():
+    """
+    db.create_all() (below) only creates *missing tables* — it never adds a
+    new column to a table that already exists. That's exactly what upgrading
+    an existing deployment needs, though, and platforms like Render's free
+    tier don't include a Shell/terminal to run a one-off migration script by
+    hand. So instead, this runs automatically on every startup: it checks
+    which of the newer `user` columns (dob, profile_pic, theme, appearance)
+    are already there and adds whichever ones are missing. Existing rows are
+    never touched or dropped, and columns that already exist are skipped, so
+    it's safe to run on every single restart.
+    """
+    inspector = inspect(db.engine)
+    if "user" not in inspector.get_table_names():
+        return  # brand new database — create_all() above already built it correctly
+
+    existing_columns = {col["name"] for col in inspector.get_columns("user")}
+    new_columns = {
+        "dob": "DATE",
+        "profile_pic": "TEXT",
+        "theme": "VARCHAR(20) NOT NULL DEFAULT 'purple'",
+        "appearance": "VARCHAR(10) NOT NULL DEFAULT 'system'",
+    }
+    with db.engine.begin() as conn:
+        for name, coltype in new_columns.items():
+            if name in existing_columns:
+                continue
+            conn.execute(text(f'ALTER TABLE "user" ADD COLUMN {name} {coltype}'))
+            print(f"[migration] added user.{name}")
+
+
 with app.app_context():
     db.create_all()
+    run_startup_migrations()
 
 
 if __name__ == "__main__":
