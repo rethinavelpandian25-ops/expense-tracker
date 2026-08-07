@@ -1,283 +1,132 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dashboard — Ledger</title>
-  <script>
-    // Apply the signed-in user's saved theme + appearance before the
-    // stylesheet paints anything, so there's no flash of the default
-    // purple/light look before switching to their choice.
-    (function () {
-      var theme = {{ theme|tojson }};
-      var mode = {{ appearance|tojson }};
-      var resolved = mode === "system"
-        ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-        : mode;
-      var html = document.documentElement;
-      html.setAttribute("data-theme", theme);
-      html.setAttribute("data-appearance", resolved);
-      html.setAttribute("data-appearance-mode", mode);
-      try { localStorage.setItem("ledger-appearance", mode); } catch (err) { /* ignore */ }
-    })();
-  </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
-</head>
-<body>
+{% extends "app_shell.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Dashboard — Ledger{% endblock %}
 
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="mark">₹</div>
-        <span>Ledger</span>
+{% block main_content %}
+  <header class="topbar">
+    <div class="search-wrap">
+      <input type="text" id="searchInput" placeholder="Search category, note or amount…" />
+    </div>
+    <div class="topbar-actions">
+      <a class="avatar" id="avatarBtn" href="/settings" title="Settings" aria-label="Open settings"></a>
+    </div>
+  </header>
+
+  <section id="overview">
+    <div class="balance-card">
+      <div class="balance-info">
+        <div class="label">Your balance</div>
+        <div class="value amount" id="balanceValue">₹0.00</div>
       </div>
-
-      <nav class="nav-links">
-        <button class="nav-link active" data-target="overview">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
-          <span>Dashboard</span>
-        </button>
-        <button class="nav-link" data-target="history">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
-          <span>Transactions</span>
-        </button>
-        <button class="nav-link" data-target="charts">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><rect x="6" y="13" width="3" height="7"/><rect x="11" y="9" width="3" height="11"/><rect x="16" y="5" width="3" height="15"/></svg>
-          <span>Reports</span>
-        </button>
-        <button class="nav-link" data-target="settings">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852 1 1.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-          <span>Settings</span>
-        </button>
-      </nav>
-
-      <div class="sidebar-footer">
-        <button class="profile-summary" id="sidebarProfileBtn" data-target="settings">
-          <span class="avatar avatar-sm" id="sidebarAvatar"></span>
-          <span class="profile-summary-text">
-            <span class="greeting">Signed in as</span>
-            <span class="username" id="sidebarUsername">{{ username }}</span>
-          </span>
+      <div class="balance-actions">
+        <button class="btn-ghost" id="addTxnOpenBtn">+ Add transaction</button>
+        <button class="btn-solid" id="downloadPdfBtn">
+          {{ icon('download') }}
+          Download PDF
         </button>
       </div>
-    </aside>
+    </div>
 
-    <main class="main">
-      <header class="topbar">
-        <div class="search-wrap">
-          <input type="text" id="searchInput" placeholder="Search category, note or amount…" />
-        </div>
-        <div class="topbar-actions">
-          <button class="avatar" id="avatarBtn" data-target="settings" title="Settings" aria-label="Open settings"></button>
-        </div>
-      </header>
+    <div class="tiles-grid" id="categoryTiles"></div>
+  </section>
 
-      <section id="overview">
-        <div class="balance-card">
-          <div class="balance-info">
-            <div class="label">Your balance</div>
-            <div class="value amount" id="balanceValue">₹0.00</div>
-          </div>
-          <div class="balance-actions">
-            <button class="btn-ghost" id="addTxnOpenBtn">+ Add transaction</button>
-            <button class="btn-solid" id="downloadPdfBtn">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
-              Download PDF
-            </button>
-          </div>
-        </div>
+  <section class="panel" id="history">
+    <div class="panel-header">
+      <h2>Transaction history</h2>
+      <button class="btn-text" id="clearHistoryBtn">Clear all</button>
+    </div>
 
-        <div class="tiles-grid" id="categoryTiles"></div>
-      </section>
+    <div class="filters">
+      <select id="filterType">
+        <option value="">All types</option>
+        <option value="income">Income</option>
+        <option value="expense">Expense</option>
+      </select>
+      <select id="filterMonth">
+        <option value="">All months</option>
+      </select>
+    </div>
 
-      <section class="panel" id="history">
-        <div class="panel-header">
-          <h2>Transaction history</h2>
-          <button class="btn-text" id="clearHistoryBtn">Clear all</button>
-        </div>
+    <table class="txn-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Category</th>
+          <th>Note</th>
+          <th>Amount</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="txnTableBody"></tbody>
+    </table>
 
-        <div class="filters">
-          <select id="filterType">
-            <option value="">All types</option>
-            <option value="income">Income</option>
-            <option value="expense">Expense</option>
-          </select>
-          <select id="filterMonth">
-            <option value="">All months</option>
-          </select>
-        </div>
+    <div class="txn-cards" id="txnCards"></div>
 
-        <table class="txn-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Type</th>
-              <th>Category</th>
-              <th>Note</th>
-              <th>Amount</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="txnTableBody"></tbody>
-        </table>
+    <div class="empty-state" id="emptyState" style="display:none;">No transactions yet — add your first one above.</div>
+  </section>
 
-        <div class="txn-cards" id="txnCards"></div>
-
-        <div class="empty-state" id="emptyState" style="display:none;">No transactions yet — add your first one above.</div>
-      </section>
-
-      <section class="panel" id="charts">
-        <h2>Reports</h2>
-        <div class="reports-grid">
-          <div class="reports-main">
-            <div class="chart-card">
-              <div class="chart-card-header">
-                <h3>Monthly overview</h3>
-                <div class="legend-dots">
-                  <span class="legend-dot" style="background:var(--income)"></span>Income
-                  <span class="legend-dot" style="background:var(--expense); margin-left:10px;"></span>Expense
-                </div>
-              </div>
-              <div class="chart-box tall"><canvas id="monthlyBarChart"></canvas></div>
-            </div>
-
-            <div class="chart-card">
-              <div class="chart-card-header">
-                <h3>Cashflow</h3>
-                <div class="toggle-pill">
-                  <button type="button" class="pill-btn active" data-cashflow="income">Income</button>
-                  <button type="button" class="pill-btn" data-cashflow="expense">Expenses</button>
-                </div>
-              </div>
-              <div class="chart-box"><canvas id="cashflowChart"></canvas></div>
+  <section class="panel" id="charts">
+    <h2>Reports</h2>
+    <div class="reports-grid">
+      <div class="reports-main">
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>Monthly overview</h3>
+            <div class="legend-dots">
+              <span class="legend-dot" style="background:var(--income)"></span>Income
+              <span class="legend-dot" style="background:var(--expense); margin-left:10px;"></span>Expense
             </div>
           </div>
-
-          <div class="reports-side">
-            <div class="stat-card income-stat">
-              <div>
-                <div class="stat-label">Total income</div>
-                <div class="stat-value amount" id="reportIncomeValue">₹0.00</div>
-              </div>
-              <div class="stat-icon">↑</div>
-            </div>
-            <div class="stat-card expense-stat">
-              <div>
-                <div class="stat-label">Total expense</div>
-                <div class="stat-value amount" id="reportExpenseValue">₹0.00</div>
-              </div>
-              <div class="stat-icon">↓</div>
-            </div>
-
-            <div class="chart-card expenses-card">
-              <h3>Expenses by category</h3>
-              <div class="donut-wrap">
-                <div class="chart-box donut-box"><canvas id="categoryChart"></canvas></div>
-                <div class="donut-center">
-                  <div class="donut-total amount" id="donutTotalValue">₹0</div>
-                  <div class="donut-sub">Total</div>
-                </div>
-              </div>
-              <ul class="category-legend" id="categoryLegendList"></ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel" id="settings">
-        <div class="panel-header">
-          <h2>Settings</h2>
+          <div class="chart-box tall"><canvas id="monthlyBarChart"></canvas></div>
         </div>
 
-        <div class="settings-grid">
-          <div class="settings-card">
-            <h3>Profile photo</h3>
-            <div class="photo-row">
-              <span class="avatar avatar-lg" id="settingsAvatar"></span>
-              <div class="photo-actions">
-                <label class="btn-ghost-outline" for="profilePicInput">
-                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                  Upload photo
-                </label>
-                <input type="file" id="profilePicInput" accept="image/png,image/jpeg,image/webp" hidden />
-                <button type="button" class="btn-text" id="removePhotoBtn">Remove photo</button>
-              </div>
-            </div>
-            <p class="field-hint">JPG, PNG or WEBP · up to 1.5 MB</p>
-          </div>
-
-          <div class="settings-card">
-            <h3>Username</h3>
-            <form id="usernameForm" class="inline-form">
-              <input type="text" id="usernameInput" maxlength="80" required />
-              <button type="submit" class="btn-solid">Save</button>
-            </form>
-          </div>
-
-          <div class="settings-card">
-            <h3>Password</h3>
-            <form id="passwordForm" class="stacked-form">
-              <input type="password" id="currentPasswordInput" placeholder="Current password" autocomplete="current-password" required />
-              <input type="password" id="newPasswordInput" placeholder="New password (min. 6 characters)" autocomplete="new-password" minlength="6" required />
-              <input type="password" id="confirmPasswordInput" placeholder="Confirm new password" autocomplete="new-password" minlength="6" required />
-              <button type="submit" class="btn-solid">Update password</button>
-            </form>
-          </div>
-
-          <div class="settings-card">
-            <h3>Theme color</h3>
-            <p class="field-hint">Pick an accent color for your account.</p>
-            <div class="theme-swatches" id="themeSwatches">
-              <button type="button" class="theme-swatch" data-theme="purple" style="--swatch-a:#9061f9;--swatch-b:#6d28d9" title="Purple" aria-label="Purple theme"></button>
-              <button type="button" class="theme-swatch" data-theme="blue" style="--swatch-a:#3b82f6;--swatch-b:#1d4ed8" title="Blue" aria-label="Blue theme"></button>
-              <button type="button" class="theme-swatch" data-theme="green" style="--swatch-a:#10b981;--swatch-b:#047857" title="Green" aria-label="Green theme"></button>
-              <button type="button" class="theme-swatch" data-theme="rose" style="--swatch-a:#fb7185;--swatch-b:#be123c" title="Rose" aria-label="Rose theme"></button>
-              <button type="button" class="theme-swatch" data-theme="amber" style="--swatch-a:#f97316;--swatch-b:#9a3412" title="Amber" aria-label="Amber theme"></button>
-              <button type="button" class="theme-swatch" data-theme="teal" style="--swatch-a:#2dd4bf;--swatch-b:#0f766e" title="Teal" aria-label="Teal theme"></button>
-              <button type="button" class="theme-swatch" data-theme="graphite" style="--swatch-a:#64748b;--swatch-b:#334155" title="Graphite" aria-label="Graphite theme"></button>
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>Cashflow</h3>
+            <div class="toggle-pill">
+              <button type="button" class="pill-btn active" data-cashflow="income">Income</button>
+              <button type="button" class="pill-btn" data-cashflow="expense">Expenses</button>
             </div>
           </div>
-
-          <div class="settings-card">
-            <h3>Appearance</h3>
-            <p class="field-hint">Light, dark, or match your device automatically.</p>
-            <div class="appearance-toggle" id="appearanceToggle">
-              <button type="button" data-appearance-mode="light">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"/></svg>
-                Light
-              </button>
-              <button type="button" data-appearance-mode="dark">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-                Dark
-              </button>
-              <button type="button" data-appearance-mode="system">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                System
-              </button>
-            </div>
-          </div>
-
-          <div class="settings-card danger-card">
-            <h3>Account</h3>
-            <p class="field-hint">Signed in as <strong id="settingsEmail">{{ email }}</strong></p>
-            <div class="danger-actions">
-              <button type="button" class="btn-ghost-outline" id="settingsLogoutBtn">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                Log out
-              </button>
-              <button type="button" class="btn-danger" id="settingsDeleteBtn">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
-                Delete account
-              </button>
-            </div>
-          </div>
+          <div class="chart-box"><canvas id="cashflowChart"></canvas></div>
         </div>
-      </section>
-    </main>
-  </div>
+      </div>
 
+      <div class="reports-side">
+        <div class="stat-card income-stat">
+          <div>
+            <div class="stat-label">Total income</div>
+            <div class="stat-value amount" id="reportIncomeValue">₹0.00</div>
+          </div>
+          <div class="stat-icon">↑</div>
+        </div>
+        <div class="stat-card expense-stat">
+          <div>
+            <div class="stat-label">Total expense</div>
+            <div class="stat-value amount" id="reportExpenseValue">₹0.00</div>
+          </div>
+          <div class="stat-icon">↓</div>
+        </div>
+
+        <div class="chart-card expenses-card">
+          <h3>Expenses by category</h3>
+          <div class="donut-wrap">
+            <div class="chart-box donut-box"><canvas id="categoryChart"></canvas></div>
+            <div class="donut-center">
+              <div class="donut-total amount" id="donutTotalValue">₹0</div>
+              <div class="donut-sub">Total</div>
+            </div>
+          </div>
+          <ul class="category-legend" id="categoryLegendList"></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block modals %}
+  {{ super() }}
   <!-- Add / edit transaction modal -->
   <div class="modal-overlay" id="txnModalOverlay">
     <div class="modal">
@@ -323,49 +172,19 @@
       </div>
     </div>
   </div>
+{% endblock %}
 
-  <!-- generic confirm modal (delete transaction / clear history / logout / delete account) -->
-  <div class="modal-overlay" id="confirmModalOverlay">
-    <div class="modal small">
-      <h2 id="confirmTitle">Are you sure?</h2>
-      <p id="confirmMessage"></p>
-      <div class="modal-actions">
-        <button class="btn-ghost" id="confirmCancel">Cancel</button>
-        <button class="btn-danger" id="confirmOk">Confirm</button>
-      </div>
-    </div>
-  </div>
+{% block mobile_nav %}
+  <a href="/dashboard#overview" data-target="overview" title="Dashboard" aria-label="Dashboard">{{ icon('dashboard') }}</a>
+  <button id="mobileSearchBtn" title="Search" aria-label="Search">{{ icon('search') }}</button>
+  <button class="add-fab" id="mobileAddBtn" title="Add transaction" aria-label="Add transaction">{{ icon('plus') }}</button>
+  <a href="/dashboard#charts" data-target="charts" title="Reports" aria-label="Reports">{{ icon('reports') }}</a>
+  <a href="/settings" title="Settings" aria-label="Settings">{{ icon('settings') }}</a>
+{% endblock %}
 
-  <nav class="mobile-bottom-nav">
-    <button data-target="overview" title="Dashboard" aria-label="Dashboard">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
-    </button>
-    <button id="mobileSearchBtn" title="Search" aria-label="Search">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-    </button>
-    <button class="add-fab" id="mobileAddBtn" title="Add transaction" aria-label="Add transaction">+</button>
-    <button data-target="charts" title="Reports" aria-label="Reports">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><rect x="6" y="13" width="3" height="7"/><rect x="11" y="9" width="3" height="11"/><rect x="16" y="5" width="3" height="15"/></svg>
-    </button>
-    <button data-target="settings" title="Settings" aria-label="Settings">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852 1 1.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-    </button>
-  </nav>
-
-  <div class="toast" id="toast"></div>
-
+{% block extra_scripts %}
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.6/jspdf.plugin.autotable.min.js"></script>
-  <script>
-    window.LEDGER_USER = {
-      username: {{ username|tojson }},
-      email: {{ email|tojson }},
-      profile_pic: {{ profile_pic|tojson }},
-      theme: {{ theme|tojson }},
-      appearance: {{ appearance|tojson }}
-    };
-  </script>
   <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
-</body>
-</html>
+{% endblock %}

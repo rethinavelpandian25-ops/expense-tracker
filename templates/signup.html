@@ -1,3 +1,4 @@
+{% from "_forms.html" import password_field %}
 <!DOCTYPE html>
 <html lang="en" data-theme="purple" data-appearance="light">
 <head>
@@ -45,10 +46,7 @@
           <input type="date" id="dob" name="dob" autocomplete="bday" required />
           <span class="field-hint">You must be {{ min_age }} or older to use Ledger.</span>
         </div>
-        <div class="field">
-          <label for="password">Password</label>
-          <input type="password" id="password" name="password" autocomplete="new-password" minlength="6" required />
-        </div>
+        {{ password_field("password", "password", "Password", "new-password", minlength=6) }}
         <button type="submit" class="btn-primary" id="submitBtn">Create account</button>
       </form>
 
@@ -56,6 +54,7 @@
     </div>
   </div>
 
+  <script src="{{ url_for('static', filename='js/password-toggle.js') }}"></script>
   <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
   <script>
     // Keep the date picker from offering obviously-invalid dates.

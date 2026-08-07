@@ -1,3 +1,4 @@
+{% from "_forms.html" import password_field %}
 <!DOCTYPE html>
 <html lang="en" data-theme="purple" data-appearance="light">
 <head>
@@ -30,7 +31,7 @@
         <span>Ledger</span>
       </div>
       <h1>Welcome back</h1>
-      <p class="auth-sub">Log in to see your spending history.</p>
+      <p class="auth-sub">Log in to see your spending history. You'll stay signed in on this device until you log out.</p>
 
       <div class="error-banner" id="errorBanner"></div>
 
@@ -39,10 +40,7 @@
           <label for="username">Username or email</label>
           <input type="text" id="username" name="username" autocomplete="username" required />
         </div>
-        <div class="field">
-          <label for="password">Password</label>
-          <input type="password" id="password" name="password" autocomplete="current-password" required />
-        </div>
+        {{ password_field("password", "password", "Password", "current-password") }}
         <button type="submit" class="btn-primary" id="submitBtn">Log in</button>
       </form>
 
@@ -50,6 +48,7 @@
     </div>
   </div>
 
+  <script src="{{ url_for('static', filename='js/password-toggle.js') }}"></script>
   <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
   <script>
     setupAuthForm({

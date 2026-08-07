@@ -10,12 +10,10 @@ let confirmCallback = null;
 let cashflowMode = "income";
 let lastMonthlyData = {};
 let lastByCategory = {};
-let systemAppearanceMedia = null;
 
-// Populated server-side (see the inline script at the bottom of
-// dashboard.html) so the page already knows the signed-in user without an
-// extra round trip on load.
-const account = window.LEDGER_USER || { username: "", email: "", profile_pic: null, theme: "purple", appearance: "system" };
+// Populated server-side (see the inline script in app_shell.html) so the
+// page already knows the signed-in user without an extra round trip.
+const account = window.LEDGER_USER || { username: "", profile_pic: null };
 
 const currency = (n) =>
   "₹" + Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -42,18 +40,8 @@ const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyV
 // Init
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
-  // Section nav — sidebar links, the mobile bottom nav, and the avatar /
-  // profile-summary shortcuts all share the same data-target mechanism.
-  document.querySelectorAll("[data-target]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const target = document.getElementById(btn.dataset.target);
-      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
-      document.querySelectorAll(".nav-link, .mobile-bottom-nav button[data-target]").forEach((l) => l.classList.remove("active"));
-      document.querySelectorAll(`[data-target="${btn.dataset.target}"]`).forEach((l) => {
-        if (l.classList.contains("nav-link") || l.closest(".mobile-bottom-nav")) l.classList.add("active");
-      });
-    });
-  });
+  renderAvatars();
+  setupSectionNav();
 
   // Filters + search
   document.getElementById("filterType").addEventListener("change", renderTransactions);
@@ -88,9 +76,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.target.id === "pdfModalOverlay") closePdfModal();
   });
 
-  // Generic confirm modal — used for delete transaction, clear history,
-  // log out, and delete account, so every destructive/session-ending
-  // action gets the same "are you sure?" gate.
+  // Generic confirm modal — used for delete transaction and clear history.
   document.getElementById("confirmCancel").addEventListener("click", closeConfirm);
   document.getElementById("confirmOk").addEventListener("click", async () => {
     const cb = confirmCallback;
@@ -117,9 +103,58 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("searchInput").focus();
   });
 
-  initSettings();
   loadEverything();
 });
+
+function renderAvatars() {
+  const avatarBtn = document.getElementById("avatarBtn");
+  const sidebarAvatar = document.getElementById("sidebarAvatar");
+  [avatarBtn, sidebarAvatar].forEach((el) => {
+    if (!el) return;
+    if (account.profile_pic) {
+      el.innerHTML = `<img src="${account.profile_pic}" alt="Profile photo" />`;
+    } else {
+      el.textContent = (account.username || "?").charAt(0).toUpperCase();
+    }
+  });
+}
+
+// Dashboard/Transactions/Reports links carry both a real href (so they work
+// with no JS, in a new tab, etc.) and a data-target matching a section id
+// on THIS page. When the target exists here, intercept the click for a
+// smooth in-page scroll instead of a full reload. When it doesn't (e.g. the
+// Settings page linking back to a dashboard section), let the browser
+// follow the href normally — that's how cross-page nav still works with
+// zero extra code.
+function setupSectionNav() {
+  document.querySelectorAll("[data-target]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      const target = document.getElementById(el.dataset.target);
+      if (!target) return; // not on this page — let the link navigate normally
+      e.preventDefault();
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (history.replaceState) history.replaceState(null, "", `#${el.dataset.target}`);
+      document.querySelectorAll(".nav-link, .mobile-bottom-nav [data-target]").forEach((l) => l.classList.remove("active"));
+      document.querySelectorAll(`[data-target="${el.dataset.target}"]`).forEach((l) => {
+        if (l.classList.contains("nav-link") || l.closest(".mobile-bottom-nav")) l.classList.add("active");
+      });
+    });
+  });
+
+  // Arriving here via a link like /dashboard#history (e.g. from the
+  // Settings page) — jump to that section and mark the right nav item.
+  if (location.hash) {
+    const target = document.querySelector(location.hash);
+    if (target) {
+      requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
+      const key = location.hash.slice(1);
+      document.querySelectorAll(".nav-link, .mobile-bottom-nav [data-target]").forEach((l) => l.classList.remove("active"));
+      document.querySelectorAll(`[data-target="${key}"]`).forEach((l) => {
+        if (l.classList.contains("nav-link") || l.closest(".mobile-bottom-nav")) l.classList.add("active");
+      });
+    }
+  }
+}
 
 async function loadEverything() {
   await Promise.all([loadTransactions(), loadSummary()]);
@@ -160,18 +195,6 @@ async function loadSummary() {
   renderCategoryChart(lastByCategory);
   renderMonthlyBarChart(lastMonthlyData);
   renderCashflowChart(lastMonthlyData);
-}
-
-async function logout() {
-  try {
-    await apiFetch("/api/logout", { method: "POST" });
-  } finally {
-    window.location.href = "/login";
-  }
-}
-
-function confirmLogout() {
-  openConfirm("Log out?", "You'll need to sign in again to see your data.", logout);
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +276,7 @@ function deleteTransaction(id) {
 }
 
 // ---------------------------------------------------------------------------
-// Clear history / delete account
+// Clear history
 // ---------------------------------------------------------------------------
 function confirmClearHistory() {
   if (!allTransactions.length) {
@@ -271,22 +294,6 @@ function confirmClearHistory() {
       } catch (err) {
         showToast(err.message);
       }
-    }
-  );
-}
-
-function confirmDeleteAccount() {
-  openConfirm(
-    "Delete your account?",
-    "This permanently deletes your account and all transaction history. This cannot be undone.",
-    async () => {
-      try {
-        await apiFetch("/api/account", { method: "DELETE" });
-      } catch (err) {
-        showToast(err.message);
-        return;
-      }
-      window.location.href = "/login";
     }
   );
 }
@@ -326,40 +333,61 @@ function exportPdf(rows, scopeLabel) {
     showToast("Nothing to export in that view.");
     return;
   }
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
 
-  const income = rows.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const expense = rows.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  // jsPDF/autotable load from a CDN — if a connection hiccup, an ad
+  // blocker, or a corporate firewall stopped either script from loading,
+  // window.jspdf (or doc.autoTable) simply won't exist. Fail with a clear
+  // message instead of a silent no-op click.
+  if (!window.jspdf || typeof window.jspdf.jsPDF !== "function") {
+    showToast("Couldn't load the PDF tool — check your connection and reload the page.");
+    return;
+  }
 
-  // jsPDF's built-in fonts don't reliably render the ₹ glyph, so PDF output
-  // uses "Rs." instead of the on-screen ₹ symbol to avoid garbled text.
-  const rs = (n) => "Rs. " + Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
 
-  doc.setFontSize(16);
-  doc.text("Ledger — Transaction Report", 14, 18);
-  doc.setFontSize(10);
-  doc.setTextColor(120);
-  doc.text(`${scopeLabel} · Generated ${new Date().toLocaleDateString()} · ${rows.length} transactions`, 14, 25);
-  doc.setTextColor(20);
-  doc.setFontSize(11);
-  doc.text(`Income: ${rs(income)}    Expense: ${rs(expense)}    Net: ${rs(income - expense)}`, 14, 33);
+    if (typeof doc.autoTable !== "function") {
+      showToast("Couldn't load the PDF table tool — check your connection and reload the page.");
+      return;
+    }
 
-  doc.autoTable({
-    startY: 40,
-    head: [["Date", "Type", "Category", "Note", "Amount"]],
-    body: rows.map((t) => [
-      formatDate(t.date),
-      t.type,
-      t.category,
-      t.note || "-",
-      (t.type === "income" ? "+" : "-") + rs(t.amount),
-    ]),
-    headStyles: { fillColor: [124, 58, 237] },
-    styles: { fontSize: 9 },
-  });
+    const income = rows.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+    const expense = rows.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
 
-  doc.save(`ledger-transactions-${todayLocalISO()}.pdf`);
+    // jsPDF's built-in fonts only reliably render plain ASCII, so PDF
+    // output avoids ₹, —, and · in favor of "Rs.", "-", and "|" — this
+    // keeps every PDF viewer/printer rendering it correctly.
+    const rs = (n) => "Rs. " + Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    doc.setFontSize(16);
+    doc.text("Ledger - Transaction Report", 14, 18);
+    doc.setFontSize(10);
+    doc.setTextColor(120);
+    doc.text(`${scopeLabel} | Generated ${new Date().toLocaleDateString()} | ${rows.length} transactions`, 14, 25);
+    doc.setTextColor(20);
+    doc.setFontSize(11);
+    doc.text(`Income: ${rs(income)}    Expense: ${rs(expense)}    Net: ${rs(income - expense)}`, 14, 33);
+
+    doc.autoTable({
+      startY: 40,
+      head: [["Date", "Type", "Category", "Note", "Amount"]],
+      body: rows.map((t) => [
+        formatDate(t.date),
+        t.type,
+        t.category,
+        t.note || "-",
+        (t.type === "income" ? "+" : "-") + rs(t.amount),
+      ]),
+      headStyles: { fillColor: [124, 58, 237] },
+      styles: { fontSize: 9 },
+    });
+
+    doc.save(`ledger-transactions-${todayLocalISO()}.pdf`);
+  } catch (err) {
+    console.error("PDF export failed:", err);
+    showToast("Couldn't generate the PDF. Please try again.");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -474,8 +502,7 @@ function escapeHtml(str) {
 
 // ---------------------------------------------------------------------------
 // Charts — colors are read live from CSS variables so they always match the
-// current theme + light/dark appearance (see refreshThemedVisuals below,
-// called whenever either changes).
+// current theme + light/dark appearance chosen in Settings.
 // ---------------------------------------------------------------------------
 function tilePalette() {
   return [cssVar("--primary"), "#16a34a", "#f59e0b", "#0ea5e9", "#e11d48", "#8b5cf6"];
@@ -608,16 +635,6 @@ function renderCashflowChart(monthly) {
   });
 }
 
-// Re-draws every chart + tile with the colors the newly-applied theme or
-// appearance resolves to. Cheap to call — it just replays the last summary
-// response through the same render functions.
-function refreshThemedVisuals() {
-  renderCategoryTiles(lastByCategory);
-  renderCategoryChart(lastByCategory);
-  renderMonthlyBarChart(lastMonthlyData);
-  renderCashflowChart(lastMonthlyData);
-}
-
 // ---------------------------------------------------------------------------
 // Toast
 // ---------------------------------------------------------------------------
@@ -628,231 +645,4 @@ function showToast(message) {
   toast.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
-}
-
-// ---------------------------------------------------------------------------
-// Settings — profile photo, username, password, theme, appearance, account
-// ---------------------------------------------------------------------------
-function initSettings() {
-  renderAvatars();
-  document.getElementById("settingsEmail").textContent = account.email;
-  document.getElementById("sidebarUsername").textContent = account.username;
-  document.getElementById("usernameInput").value = account.username;
-
-  // Logout / delete account now live only in Settings, each behind the
-  // same confirm modal used for other destructive actions.
-  document.getElementById("settingsLogoutBtn").addEventListener("click", confirmLogout);
-  document.getElementById("settingsDeleteBtn").addEventListener("click", confirmDeleteAccount);
-
-  // Profile photo
-  document.getElementById("profilePicInput").addEventListener("change", handleProfilePicChange);
-  document.getElementById("removePhotoBtn").addEventListener("click", handleRemovePhoto);
-
-  // Username
-  document.getElementById("usernameForm").addEventListener("submit", handleUsernameSubmit);
-
-  // Password
-  document.getElementById("passwordForm").addEventListener("submit", handlePasswordSubmit);
-
-  // Theme swatches
-  const swatches = document.querySelectorAll(".theme-swatch");
-  swatches.forEach((btn) => {
-    if (btn.dataset.theme === account.theme) btn.classList.add("active");
-    btn.addEventListener("click", () => handleThemeChange(btn.dataset.theme));
-  });
-
-  // Appearance toggle
-  const appearanceButtons = document.querySelectorAll("#appearanceToggle button");
-  appearanceButtons.forEach((btn) => {
-    if (btn.dataset.appearanceMode === account.appearance) btn.classList.add("active");
-    btn.addEventListener("click", () => handleAppearanceChange(btn.dataset.appearanceMode));
-  });
-
-  watchSystemAppearance(account.appearance);
-}
-
-function renderAvatars() {
-  [
-    document.getElementById("avatarBtn"),
-    document.getElementById("sidebarAvatar"),
-    document.getElementById("settingsAvatar"),
-  ].forEach((el) => {
-    if (!el) return;
-    if (account.profile_pic) {
-      el.innerHTML = `<img src="${account.profile_pic}" alt="Profile photo" />`;
-    } else {
-      el.textContent = (account.username || "?").charAt(0).toUpperCase();
-    }
-  });
-}
-
-function readAndCompressImage(file, maxDim = 480, quality = 0.85) {
-  return new Promise((resolve, reject) => {
-    if (!file.type.startsWith("image/")) {
-      reject(new Error("Please choose an image file."));
-      return;
-    }
-    if (file.size > 8 * 1024 * 1024) {
-      reject(new Error("That photo is too large — please pick one under 8 MB."));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round(height * (maxDim / width));
-            width = maxDim;
-          } else {
-            width = Math.round(width * (maxDim / height));
-            height = maxDim;
-          }
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, width, height);
-        const mime = file.type === "image/png" ? "image/png" : "image/jpeg";
-        resolve(canvas.toDataURL(mime, quality));
-      };
-      img.onerror = () => reject(new Error("Couldn't read that image."));
-      img.src = reader.result;
-    };
-    reader.onerror = () => reject(new Error("Couldn't read that image."));
-    reader.readAsDataURL(file);
-  });
-}
-
-async function handleProfilePicChange(e) {
-  const file = e.target.files && e.target.files[0];
-  e.target.value = "";
-  if (!file) return;
-
-  try {
-    const dataUrl = await readAndCompressImage(file);
-    const res = await apiFetch("/api/account/profile-picture", { method: "PUT", body: JSON.stringify({ image: dataUrl }) });
-    account.profile_pic = res.profile_pic;
-    renderAvatars();
-    showToast("Profile photo updated.");
-  } catch (err) {
-    showToast(err.message);
-  }
-}
-
-async function handleRemovePhoto() {
-  if (!account.profile_pic) {
-    showToast("No photo to remove.");
-    return;
-  }
-  try {
-    await apiFetch("/api/account/profile-picture", { method: "DELETE" });
-    account.profile_pic = null;
-    renderAvatars();
-    showToast("Profile photo removed.");
-  } catch (err) {
-    showToast(err.message);
-  }
-}
-
-async function handleUsernameSubmit(e) {
-  e.preventDefault();
-  const input = document.getElementById("usernameInput");
-  const newUsername = input.value.trim();
-  if (!newUsername) return;
-
-  try {
-    const res = await apiFetch("/api/account/username", { method: "PUT", body: JSON.stringify({ username: newUsername }) });
-    account.username = res.username;
-    document.getElementById("sidebarUsername").textContent = account.username;
-    renderAvatars();
-    showToast("Username updated.");
-  } catch (err) {
-    showToast(err.message);
-  }
-}
-
-async function handlePasswordSubmit(e) {
-  e.preventDefault();
-  const current = document.getElementById("currentPasswordInput");
-  const next = document.getElementById("newPasswordInput");
-  const confirmInput = document.getElementById("confirmPasswordInput");
-
-  if (next.value !== confirmInput.value) {
-    showToast("New passwords don't match.");
-    return;
-  }
-  if (next.value.length < 6) {
-    showToast("New password must be at least 6 characters.");
-    return;
-  }
-
-  try {
-    await apiFetch("/api/account/password", {
-      method: "PUT",
-      body: JSON.stringify({ current_password: current.value, new_password: next.value }),
-    });
-    document.getElementById("passwordForm").reset();
-    showToast("Password updated.");
-  } catch (err) {
-    showToast(err.message);
-  }
-}
-
-async function handleThemeChange(theme) {
-  if (theme === account.theme) return;
-  account.theme = theme;
-  document.documentElement.setAttribute("data-theme", theme);
-  document.querySelectorAll(".theme-swatch").forEach((b) => b.classList.toggle("active", b.dataset.theme === theme));
-  refreshThemedVisuals();
-  try {
-    await apiFetch("/api/account/preferences", { method: "PUT", body: JSON.stringify({ theme }) });
-  } catch (err) {
-    showToast(err.message);
-  }
-}
-
-function resolveAppearance(mode) {
-  if (mode !== "system") return mode;
-  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-function applyAppearance(mode) {
-  const resolved = resolveAppearance(mode);
-  document.documentElement.setAttribute("data-appearance", resolved);
-  document.documentElement.setAttribute("data-appearance-mode", mode);
-  try { localStorage.setItem("ledger-appearance", mode); } catch (err) { /* ignore */ }
-}
-
-function watchSystemAppearance(mode) {
-  if (!window.matchMedia) return;
-  if (systemAppearanceMedia) {
-    systemAppearanceMedia.removeEventListener("change", handleSystemAppearanceChange);
-    systemAppearanceMedia = null;
-  }
-  if (mode === "system") {
-    systemAppearanceMedia = window.matchMedia("(prefers-color-scheme: dark)");
-    systemAppearanceMedia.addEventListener("change", handleSystemAppearanceChange);
-  }
-}
-
-function handleSystemAppearanceChange() {
-  applyAppearance("system");
-  refreshThemedVisuals();
-}
-
-async function handleAppearanceChange(mode) {
-  if (mode === account.appearance) return;
-  account.appearance = mode;
-  applyAppearance(mode);
-  document.querySelectorAll("#appearanceToggle button").forEach((b) => b.classList.toggle("active", b.dataset.appearanceMode === mode));
-  watchSystemAppearance(mode);
-  refreshThemedVisuals();
-  try {
-    await apiFetch("/api/account/preferences", { method: "PUT", body: JSON.stringify({ appearance: mode }) });
-  } catch (err) {
-    showToast(err.message);
-  }
 }

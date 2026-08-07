@@ -1,0 +1,100 @@
+{% from "_icons.html" import icon %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Ledger{% endblock %}</title>
+  <script>
+    // Apply the signed-in user's saved theme + appearance before the
+    // stylesheet paints anything, so there's no flash of the default
+    // purple/light look before switching to their choice.
+    (function () {
+      var theme = {{ theme|tojson }};
+      var mode = {{ appearance|tojson }};
+      var resolved = mode === "system"
+        ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+        : mode;
+      var html = document.documentElement;
+      html.setAttribute("data-theme", theme);
+      html.setAttribute("data-appearance", resolved);
+      html.setAttribute("data-appearance-mode", mode);
+      try { localStorage.setItem("ledger-appearance", mode); } catch (err) { /* ignore */ }
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="mark">₹</div>
+        <span>Ledger</span>
+      </div>
+
+      <nav class="nav-links">
+        <a class="nav-link {{ 'active' if active_nav == 'overview' }}" href="/dashboard#overview" data-target="overview">
+          {{ icon('dashboard') }}<span>Dashboard</span>
+        </a>
+        <a class="nav-link {{ 'active' if active_nav == 'history' }}" href="/dashboard#history" data-target="history">
+          {{ icon('transactions') }}<span>Transactions</span>
+        </a>
+        <a class="nav-link {{ 'active' if active_nav == 'charts' }}" href="/dashboard#charts" data-target="charts">
+          {{ icon('reports') }}<span>Reports</span>
+        </a>
+        <a class="nav-link {{ 'active' if active_nav == 'settings' }}" href="/settings">
+          {{ icon('settings') }}<span>Settings</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <a class="profile-summary" href="/settings">
+          <span class="avatar avatar-sm" id="sidebarAvatar"></span>
+          <span class="profile-summary-text">
+            <span class="greeting">Signed in as</span>
+            <span class="username" id="sidebarUsername">{{ username }}</span>
+          </span>
+        </a>
+      </div>
+    </aside>
+
+    <main class="main">
+      {% block main_content %}{% endblock %}
+    </main>
+  </div>
+
+  {% block modals %}
+  <!-- generic confirm modal (delete transaction / clear history / log out / delete account) -->
+  <div class="modal-overlay" id="confirmModalOverlay">
+    <div class="modal small">
+      <h2 id="confirmTitle">Are you sure?</h2>
+      <p id="confirmMessage"></p>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="confirmCancel">Cancel</button>
+        <button class="btn-danger" id="confirmOk">Confirm</button>
+      </div>
+    </div>
+  </div>
+  {% endblock %}
+
+  <nav class="mobile-bottom-nav">
+    {% block mobile_nav %}{% endblock %}
+  </nav>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    window.LEDGER_USER = {
+      username: {{ username|tojson }},
+      email: {{ email|tojson }},
+      profile_pic: {{ profile_pic|tojson }},
+      theme: {{ theme|tojson }},
+      appearance: {{ appearance|tojson }}
+    };
+  </script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

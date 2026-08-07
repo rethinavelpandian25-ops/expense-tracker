@@ -1,0 +1,102 @@
+{% extends "app_shell.html" %}
+{% from "_icons.html" import icon %}
+{% from "_forms.html" import password_field %}
+{% block title %}Settings — Ledger{% endblock %}
+
+{% block main_content %}
+  <header class="topbar">
+    <h1 class="page-title">Settings</h1>
+    <div class="topbar-actions">
+      <a class="btn-ghost-outline" href="/dashboard">{{ icon('back') }} Back to dashboard</a>
+    </div>
+  </header>
+
+  <section class="panel" id="settingsPanel">
+    <div class="settings-grid">
+      <div class="settings-card">
+        <h3>Profile photo</h3>
+        <div class="photo-row">
+          <span class="avatar avatar-lg" id="settingsAvatar"></span>
+          <div class="photo-actions">
+            <label class="btn-ghost-outline" for="profilePicInput">
+              {{ icon('camera') }}
+              Upload photo
+            </label>
+            <input type="file" id="profilePicInput" accept="image/png,image/jpeg,image/webp" hidden />
+            <button type="button" class="btn-text" id="removePhotoBtn">Remove photo</button>
+          </div>
+        </div>
+        <p class="field-hint">JPG, PNG or WEBP · up to 1.5 MB</p>
+      </div>
+
+      <div class="settings-card">
+        <h3>Username</h3>
+        <form id="usernameForm" class="inline-form">
+          <input type="text" id="usernameInput" maxlength="80" required />
+          <button type="submit" class="btn-solid">Save</button>
+        </form>
+      </div>
+
+      <div class="settings-card">
+        <h3>Password</h3>
+        <form id="passwordForm" class="stacked-form">
+          {{ password_field("currentPasswordInput", none, "Current password", "current-password", placeholder="Current password", required=True) }}
+          {{ password_field("newPasswordInput", none, "New password", "new-password", placeholder="New password (min. 6 characters)", required=True, minlength=6) }}
+          {{ password_field("confirmPasswordInput", none, "Confirm new password", "new-password", placeholder="Confirm new password", required=True, minlength=6) }}
+          <button type="submit" class="btn-solid">Update password</button>
+        </form>
+      </div>
+
+      <div class="settings-card">
+        <h3>Theme color</h3>
+        <p class="field-hint">Pick an accent color for your account.</p>
+        <div class="theme-swatches" id="themeSwatches">
+          <button type="button" class="theme-swatch" data-theme="purple" style="--swatch-a:#9061f9;--swatch-b:#6d28d9" title="Purple" aria-label="Purple theme"></button>
+          <button type="button" class="theme-swatch" data-theme="blue" style="--swatch-a:#3b82f6;--swatch-b:#1d4ed8" title="Blue" aria-label="Blue theme"></button>
+          <button type="button" class="theme-swatch" data-theme="green" style="--swatch-a:#10b981;--swatch-b:#047857" title="Green" aria-label="Green theme"></button>
+          <button type="button" class="theme-swatch" data-theme="rose" style="--swatch-a:#fb7185;--swatch-b:#be123c" title="Rose" aria-label="Rose theme"></button>
+          <button type="button" class="theme-swatch" data-theme="amber" style="--swatch-a:#f97316;--swatch-b:#9a3412" title="Amber" aria-label="Amber theme"></button>
+          <button type="button" class="theme-swatch" data-theme="teal" style="--swatch-a:#2dd4bf;--swatch-b:#0f766e" title="Teal" aria-label="Teal theme"></button>
+          <button type="button" class="theme-swatch" data-theme="graphite" style="--swatch-a:#64748b;--swatch-b:#334155" title="Graphite" aria-label="Graphite theme"></button>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <h3>Appearance</h3>
+        <p class="field-hint">Light, dark, or match your device automatically.</p>
+        <div class="appearance-toggle" id="appearanceToggle">
+          <button type="button" data-appearance-mode="light">{{ icon('sun') }}Light</button>
+          <button type="button" data-appearance-mode="dark">{{ icon('moon') }}Dark</button>
+          <button type="button" data-appearance-mode="system">{{ icon('monitor') }}System</button>
+        </div>
+      </div>
+
+      <div class="settings-card danger-card">
+        <h3>Account</h3>
+        <p class="field-hint">Signed in as <strong id="settingsEmail">{{ email }}</strong></p>
+        <div class="danger-actions">
+          <button type="button" class="btn-ghost-outline" id="settingsLogoutBtn">
+            {{ icon('logout') }}
+            Log out
+          </button>
+          <button type="button" class="btn-danger" id="settingsDeleteBtn">
+            {{ icon('trash') }}
+            Delete account
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block mobile_nav %}
+  <a href="/dashboard#overview" data-target="overview" title="Dashboard" aria-label="Dashboard">{{ icon('dashboard') }}</a>
+  <a href="/dashboard#history" data-target="history" title="Transactions" aria-label="Transactions">{{ icon('transactions') }}</a>
+  <a href="/dashboard#charts" data-target="charts" title="Reports" aria-label="Reports">{{ icon('reports') }}</a>
+  <a href="/settings" class="active" title="Settings" aria-label="Settings">{{ icon('settings') }}</a>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script src="{{ url_for('static', filename='js/password-toggle.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+{% endblock %}

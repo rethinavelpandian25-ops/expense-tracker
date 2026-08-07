@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_login import (
@@ -21,6 +21,15 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 # everything over HTTPS — so cookies can be marked Secure there. Left off
 # for local http://localhost development.
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("RENDER", "").lower() == "true"
+# "Stay signed in" behavior: once someone logs in (or signs up), they stay
+# logged in on that device/browser indefinitely via a separate persistent
+# cookie, and are only asked to log in again after they explicitly log out
+# (see login_user(..., remember=True) below). A year is a generous but
+# bounded ceiling so a cookie doesn't linger forever on a shared machine.
+app.config["REMEMBER_COOKIE_DURATION"] = timedelta(days=365)
+app.config["REMEMBER_COOKIE_HTTPONLY"] = True
+app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"
+app.config["REMEMBER_COOKIE_SECURE"] = app.config["SESSION_COOKIE_SECURE"]
 # A profile photo is stored as a base64 data URL on the user row (see notes
 # on PROFILE_PIC_MAX_CHARS below), so the JSON body for that one endpoint
 # needs a higher limit than Flask's default.
@@ -157,6 +166,21 @@ def dashboard():
         profile_pic=current_user.profile_pic,
         theme=current_user.theme or DEFAULT_THEME,
         appearance=current_user.appearance or DEFAULT_APPEARANCE,
+        active_nav="overview",
+    )
+
+
+@app.route("/settings", methods=["GET"])
+@login_required
+def settings_page():
+    return render_template(
+        "settings.html",
+        username=current_user.username,
+        email=current_user.email,
+        profile_pic=current_user.profile_pic,
+        theme=current_user.theme or DEFAULT_THEME,
+        appearance=current_user.appearance or DEFAULT_APPEARANCE,
+        active_nav="settings",
     )
 
 
@@ -201,7 +225,9 @@ def api_signup():
     db.session.add(user)
     db.session.commit()
 
-    login_user(user)
+    # remember=True: stay logged in on this device until an explicit logout,
+    # rather than just for the browser session.
+    login_user(user, remember=True)
     return jsonify({"message": "Account created.", "username": user.username}), 201
 
 
@@ -218,7 +244,9 @@ def api_login():
     if not user or not user.check_password(password):
         return jsonify({"error": "Invalid username or password."}), 401
 
-    login_user(user)
+    # remember=True: stay logged in on this device until an explicit logout,
+    # rather than just for the browser session.
+    login_user(user, remember=True)
     return jsonify({"message": "Logged in.", "username": user.username}), 200
 
 
