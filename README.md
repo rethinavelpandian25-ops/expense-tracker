@@ -14,11 +14,6 @@ vanilla HTML/CSS/JS frontend, Chart.js for charts, PostgreSQL on Render.
 - Sign-up asks for date of birth and only creates the account if the
   person is 18 or older (checked in the browser for instant feedback, and
   re-checked on the server since that's the actual source of truth)
-- **Stay signed in** — logging in or signing up keeps you signed in on that
-  device/browser indefinitely (via a long-lived cookie), so you're not
-  asked to log in again until you explicitly log out
-- Show/hide toggle on every password field (login, signup, and all three
-  password fields in Settings)
 - Add, view, edit, and delete income/expense transactions with category,
   amount, date, note
 - Dashboard with balance, total income, total expense
@@ -26,11 +21,9 @@ vanilla HTML/CSS/JS frontend, Chart.js for charts, PostgreSQL on Render.
   (bar chart), plus a cashflow line chart
 - Filter history by type and month, free-text search across category/note/amount
 - One download button that exports a PDF (current filtered view or full
-  history) — this used to live in two places and now lives in one; export
-  also fails loudly with a clear message instead of doing nothing if the
-  PDF library didn't load (e.g. blocked by a network/ad blocker)
-- **Settings — its own page** (`/settings`, separate from the dashboard),
-  holding everything about the signed-in person's account:
+  history) — this used to live in two places and now lives in one
+- **Settings page** — its own section in the nav, holding everything about
+  the signed-in person's account:
   - Upload/remove a profile photo (shown as the round avatar everywhere);
     the photo is resized and compressed in the browser before it's ever
     sent, so uploads stay small
@@ -39,9 +32,9 @@ vanilla HTML/CSS/JS frontend, Chart.js for charts, PostgreSQL on Render.
   - Switch appearance between light, dark, or system (system is the
     default, and it live-updates if the OS theme changes while the tab is
     open)
-  - Log out and delete account — both ask for confirmation before doing
-    anything irreversible, same as the other destructive actions (deleting
-    a transaction, clearing history)
+  - Log out and delete account — both now ask for confirmation before
+    doing anything irreversible, same as the other destructive actions
+    (deleting a transaction, clearing history)
 - Theme and appearance choices are saved per-account and re-applied on
   every future login, on any device, with no flash of the wrong theme on
   load
@@ -58,25 +51,19 @@ vanilla HTML/CSS/JS frontend, Chart.js for charts, PostgreSQL on Render.
 
 ```
 expense-tracker/
-├── app.py                     # Flask app: routes, models, API
+├── app.py                 # Flask app: routes, models, API
 ├── requirements.txt
-├── render.yaml                 # Render deploy config (web service + Postgres)
+├── render.yaml             # Render deploy config (web service + Postgres)
 ├── .env.example
 ├── static/
-│   ├── css/style.css           # design tokens, theme + dark-mode variables, layout
+│   ├── css/style.css       # design tokens, theme + dark-mode variables, layout
 │   └── js/
-│       ├── auth.js             # login/signup form logic
-│       ├── password-toggle.js  # show/hide toggle, shared by login/signup/settings
-│       ├── dashboard.js        # dashboard logic: transactions, charts, PDF export
-│       └── settings.js         # settings page logic: profile, theme, appearance
+│       ├── auth.js         # login/signup form logic
+│       └── dashboard.js    # dashboard logic, settings, theming, charts, API calls
 └── templates/
-    ├── app_shell.html          # shared sidebar/topbar/modal layout (base template)
-    ├── _icons.html             # shared inline-SVG icon macros
-    ├── _forms.html             # shared password-field macro (with show/hide button)
     ├── login.html
     ├── signup.html
-    ├── dashboard.html           # extends app_shell.html
-    └── settings.html            # extends app_shell.html — its own page, own URL
+    └── dashboard.html
 ```
 
 ## 1. Run it locally

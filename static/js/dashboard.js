@@ -328,16 +328,85 @@ function closePdfModal() {
   document.getElementById("pdfModalOverlay").classList.remove("show");
 }
 
+// Draws the transaction table using jsPDF's own core primitives (text +
+// filled rects) instead of the jspdf-autotable plugin. autoTable turned out
+// to be an unreliable CDN dependency in practice — several jsPDF/autotable
+// version pairings (including the one this project used) are known to fail
+// to attach doc.autoTable at all depending on load timing/CDN quirks. This
+// avoids that failure mode entirely by not depending on the plugin.
+function drawTransactionsTable(doc, rows, startY, rs) {
+  const marginLeft = 14;
+  const marginRight = 196; // A4 width (210mm) minus a 14mm right margin
+  const tableWidth = marginRight - marginLeft;
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const bottomMargin = 18;
+  const rowHeight = 7;
+  const headerHeight = 8;
+
+  // x = left edge of each column; amount is drawn right-aligned to marginRight.
+  const columns = [
+    { key: "date", label: "Date", x: marginLeft, width: 24 },
+    { key: "type", label: "Type", x: marginLeft + 24, width: 16 },
+    { key: "category", label: "Category", x: marginLeft + 40, width: 36 },
+    { key: "note", label: "Note", x: marginLeft + 76, width: 62 },
+  ];
+  const amountColX = marginRight;
+
+  const truncate = (str, maxChars) => {
+    const s = String(str || "");
+    return s.length > maxChars ? s.slice(0, maxChars - 1) + "…" : s;
+  };
+
+  let y = startY;
+
+  function drawHeaderRow() {
+    doc.setFillColor(124, 58, 237);
+    doc.rect(marginLeft, y - 5.5, tableWidth, headerHeight, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont(undefined, "bold");
+    doc.setFontSize(9);
+    columns.forEach((col) => doc.text(col.label, col.x, y));
+    doc.text("Amount", amountColX, y, { align: "right" });
+    doc.setFont(undefined, "normal");
+    doc.setTextColor(20, 20, 20);
+    y += headerHeight;
+  }
+
+  drawHeaderRow();
+
+  rows.forEach((row, i) => {
+    if (y > pageHeight - bottomMargin) {
+      doc.addPage();
+      y = 20;
+      drawHeaderRow();
+    }
+    if (i % 2 === 1) {
+      doc.setFillColor(247, 246, 252);
+      doc.rect(marginLeft, y - 5, tableWidth, rowHeight, "F");
+    }
+    doc.setFontSize(8.5);
+    doc.setTextColor(20, 20, 20);
+    doc.text(formatDate(row.date), columns[0].x, y);
+    doc.text(row.type === "income" ? "Income" : "Expense", columns[1].x, y);
+    doc.text(truncate(row.category, 20), columns[2].x, y);
+    doc.text(truncate(row.note || "-", 34), columns[3].x, y);
+    doc.setTextColor(row.type === "income" ? 22 : 200, row.type === "income" ? 163 : 40, row.type === "income" ? 74 : 40);
+    doc.text((row.type === "income" ? "+" : "-") + rs(row.amount), amountColX, y, { align: "right" });
+    y += rowHeight;
+  });
+
+  return y;
+}
+
 function exportPdf(rows, scopeLabel) {
   if (!rows.length) {
     showToast("Nothing to export in that view.");
     return;
   }
 
-  // jsPDF/autotable load from a CDN — if a connection hiccup, an ad
-  // blocker, or a corporate firewall stopped either script from loading,
-  // window.jspdf (or doc.autoTable) simply won't exist. Fail with a clear
-  // message instead of a silent no-op click.
+  // jsPDF loads from a CDN — if a connection hiccup, an ad blocker, or a
+  // corporate firewall stopped it from loading, window.jspdf simply won't
+  // exist. Fail with a clear message instead of a silent no-op click.
   if (!window.jspdf || typeof window.jspdf.jsPDF !== "function") {
     showToast("Couldn't load the PDF tool — check your connection and reload the page.");
     return;
@@ -346,11 +415,6 @@ function exportPdf(rows, scopeLabel) {
   try {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
-
-    if (typeof doc.autoTable !== "function") {
-      showToast("Couldn't load the PDF table tool — check your connection and reload the page.");
-      return;
-    }
 
     const income = rows.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
     const expense = rows.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
@@ -369,19 +433,7 @@ function exportPdf(rows, scopeLabel) {
     doc.setFontSize(11);
     doc.text(`Income: ${rs(income)}    Expense: ${rs(expense)}    Net: ${rs(income - expense)}`, 14, 33);
 
-    doc.autoTable({
-      startY: 40,
-      head: [["Date", "Type", "Category", "Note", "Amount"]],
-      body: rows.map((t) => [
-        formatDate(t.date),
-        t.type,
-        t.category,
-        t.note || "-",
-        (t.type === "income" ? "+" : "-") + rs(t.amount),
-      ]),
-      headStyles: { fillColor: [124, 58, 237] },
-      styles: { fontSize: 9 },
-    });
+    drawTransactionsTable(doc, rows, 44, rs);
 
     doc.save(`ledger-transactions-${todayLocalISO()}.pdf`);
   } catch (err) {
