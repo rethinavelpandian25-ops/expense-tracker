@@ -656,6 +656,121 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .stat-value { font-size: 1.3rem; font-weight: 700; }
 .stat-icon { font-size: 1.3rem; }
 
+/* --------------------------------------------------------------------------
+   Reports page: stats row (income / expense / savings-rate gauge)
+   -------------------------------------------------------------------------- */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.stat-card.gauge-stat {
+  background: var(--field-bg);
+  border: 1px solid var(--border);
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.gauge-wrap { position: relative; width: 96px; height: 96px; }
+
+.gauge-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+
+.gauge-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 8;
+}
+
+.gauge-fill {
+  fill: none;
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.3s ease;
+}
+
+.gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gauge-value { font-size: 1.15rem; font-weight: 700; font-family: var(--font-mono); }
+.gauge-label { font-size: 0.78rem; color: var(--muted); }
+
+/* --------------------------------------------------------------------------
+   Reports page: smart insights
+   -------------------------------------------------------------------------- */
+.insights-panel .panel-header { margin-bottom: 4px; }
+.insights-heading { display: flex; align-items: center; gap: 8px; }
+.insights-heading .icon { color: var(--primary); width: 20px; height: 20px; }
+.insights-disclaimer { margin-bottom: 16px; }
+
+.insights-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.insight-card {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--muted);
+  background: var(--field-bg);
+  opacity: 0;
+  animation: rise 0.45s ease both;
+}
+
+.insight-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+
+.insight-card[data-severity="critical"] { border-left-color: var(--expense); }
+.insight-card[data-severity="warning"] { border-left-color: #f59e0b; }
+.insight-card[data-severity="positive"] { border-left-color: var(--income); }
+.insight-card[data-severity="info"] { border-left-color: var(--primary); }
+
+.insight-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.insight-icon .icon { width: 18px; height: 18px; }
+
+.insight-card[data-severity="critical"] .insight-icon { background: var(--expense-bg); color: var(--expense); }
+.insight-card[data-severity="warning"] .insight-icon { background: rgba(245, 158, 11, 0.16); color: #f59e0b; }
+.insight-card[data-severity="positive"] .insight-icon { background: var(--income-bg); color: var(--income); }
+.insight-card[data-severity="info"] .insight-icon { background: var(--primary-light); color: var(--primary); }
+
+.insight-body { min-width: 0; }
+.insight-title { font-weight: 700; font-size: 0.92rem; margin-bottom: 3px; }
+.insight-message { font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
+
+.insights-loading { display: flex; flex-direction: column; gap: 10px; }
+.skeleton-line {
+  height: 54px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--field-bg) 25%, var(--border) 50%, var(--field-bg) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+.skeleton-line.short { width: 60%; }
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 .income-stat .stat-icon, .income-stat .stat-value { color: var(--income); }
 .expense-stat .stat-icon, .expense-stat .stat-value { color: var(--expense); }
 
@@ -680,20 +795,43 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .category-legend li {
   display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.82rem;
+}
+
+.legend-row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  font-size: 0.82rem;
 }
 
 .legend-name { display: flex; align-items: center; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .legend-name .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 8px; flex-shrink: 0; }
 .legend-value { font-family: var(--font-mono); color: var(--muted); flex-shrink: 0; }
+
+.legend-bar-track {
+  display: block;
+  width: 100%;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.legend-bar-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: 3px;
+  transition: width 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+}
 
 .empty-state {
   color: var(--muted);
@@ -1194,6 +1332,11 @@ table.txn-table { width: 100%; border-collapse: collapse; }
   .settings-grid { grid-template-columns: 1fr; }
   .photo-row { gap: 12px; }
   .inline-form { flex-direction: column; align-items: stretch; }
+
+  .stats-row { grid-template-columns: 1fr; }
+  .gauge-wrap { width: 84px; height: 84px; }
+  .insight-card { padding: 12px 14px; gap: 10px; }
+  .insight-icon { width: 30px; height: 30px; }
 }
 
 @media (max-width: 420px) {

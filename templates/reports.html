@@ -1,0 +1,118 @@
+{% extends "app_shell.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Reports — Ledger{% endblock %}
+
+{% block main_content %}
+  <header class="topbar">
+    <h1 class="page-title">Reports</h1>
+    <div class="topbar-actions">
+      <a class="avatar" id="avatarBtn" href="/settings" title="Settings" aria-label="Open settings"></a>
+    </div>
+  </header>
+
+  <section class="panel insights-panel" id="insightsPanel">
+    <div class="panel-header">
+      <h2 class="insights-heading">{{ icon('sparkles') }} Smart insights</h2>
+    </div>
+    <p class="field-hint insights-disclaimer">
+      Generated from patterns in your own transaction history (spending trends, category
+      totals, month-to-month changes) — not financial advice, just a second pair of eyes on your data.
+    </p>
+
+    <div class="insights-list" id="insightsList"></div>
+    <div class="empty-state" id="insightsEmptyState" style="display:none;">
+      Add a few more transactions (at least 5, across a month or two) and personalized insights will show up here.
+    </div>
+    <div class="insights-loading" id="insightsLoading">
+      <div class="skeleton-line"></div>
+      <div class="skeleton-line"></div>
+      <div class="skeleton-line short"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="statsPanel">
+    <div class="stats-row">
+      <div class="stat-card income-stat">
+        <div>
+          <div class="stat-label">Total income</div>
+          <div class="stat-value amount" id="reportIncomeValue">₹0.00</div>
+        </div>
+        <div class="stat-icon">↑</div>
+      </div>
+      <div class="stat-card expense-stat">
+        <div>
+          <div class="stat-label">Total expense</div>
+          <div class="stat-value amount" id="reportExpenseValue">₹0.00</div>
+        </div>
+        <div class="stat-icon">↓</div>
+      </div>
+      <div class="stat-card gauge-stat">
+        <div class="gauge-wrap">
+          <svg class="gauge-svg" viewBox="0 0 100 100">
+            <circle class="gauge-track" cx="50" cy="50" r="42"></circle>
+            <circle class="gauge-fill" id="gaugeFill" cx="50" cy="50" r="42"></circle>
+          </svg>
+          <div class="gauge-center">
+            <div class="gauge-value" id="savingsRateValue">0%</div>
+          </div>
+        </div>
+        <div class="gauge-label" id="savingsRateLabel">This month's savings rate</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="charts">
+    <div class="panel-header"><h2>Charts</h2></div>
+    <div class="reports-grid">
+      <div class="reports-main">
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>Monthly overview</h3>
+            <div class="legend-dots">
+              <span class="legend-dot" style="background:var(--income)"></span>Income
+              <span class="legend-dot" style="background:var(--expense); margin-left:10px;"></span>Expense
+            </div>
+          </div>
+          <div class="chart-box tall"><canvas id="monthlyBarChart"></canvas></div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>Cashflow</h3>
+            <div class="toggle-pill">
+              <button type="button" class="pill-btn active" data-cashflow="income">Income</button>
+              <button type="button" class="pill-btn" data-cashflow="expense">Expenses</button>
+            </div>
+          </div>
+          <div class="chart-box"><canvas id="cashflowChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="reports-side">
+        <div class="chart-card expenses-card">
+          <h3>Expenses by category</h3>
+          <div class="donut-wrap">
+            <div class="chart-box donut-box"><canvas id="categoryChart"></canvas></div>
+            <div class="donut-center">
+              <div class="donut-total amount" id="donutTotalValue">₹0</div>
+              <div class="donut-sub">Total</div>
+            </div>
+          </div>
+          <ul class="category-legend" id="categoryLegendList"></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block mobile_nav %}
+  <a href="/dashboard#overview" data-target="overview" title="Dashboard" aria-label="Dashboard">{{ icon('dashboard') }}</a>
+  <a href="/transactions" title="Transactions" aria-label="Transactions">{{ icon('transactions') }}</a>
+  <a href="/reports" class="active" title="Reports" aria-label="Reports">{{ icon('reports') }}</a>
+  <a href="/settings" title="Settings" aria-label="Settings">{{ icon('settings') }}</a>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="{{ url_for('static', filename='js/reports.js') }}"></script>
+{% endblock %}

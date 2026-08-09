@@ -5,12 +5,7 @@ const PREVIEW_LIMIT = 7;
 
 let allTransactions = []; // holds only the preview (<= PREVIEW_LIMIT rows) on this page
 let modalSelectedType = "expense";
-let categoryChart = null;
-let monthlyBarChart = null;
-let cashflowChart = null;
 let confirmCallback = null;
-let cashflowMode = "income";
-let lastMonthlyData = {};
 let lastByCategory = {};
 
 // Populated server-side (see the inline script in app_shell.html) so the
@@ -29,13 +24,8 @@ const todayLocalISO = () => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
-const monthLabel = (ymKey) => {
-  const [y, m] = ymKey.split("-");
-  return new Date(Number(y), Number(m) - 1).toLocaleString("default", { month: "short", year: "numeric" });
-};
-
-// Reads a live CSS custom property off <html> so chart colors always match
-// the current theme + light/dark appearance, instead of being baked in.
+// Reads a live CSS custom property off <html> so the category tiles always
+// match the current theme + light/dark appearance, instead of being baked in.
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 // ---------------------------------------------------------------------------
@@ -75,16 +65,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   document.getElementById("confirmModalOverlay").addEventListener("click", (e) => {
     if (e.target.id === "confirmModalOverlay") closeConfirm();
-  });
-
-  // Cashflow toggle
-  document.querySelectorAll(".pill-btn[data-cashflow]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".pill-btn[data-cashflow]").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      cashflowMode = btn.dataset.cashflow;
-      renderCashflowChart(lastMonthlyData);
-    });
   });
 
   loadEverything();
@@ -173,15 +153,8 @@ async function loadTransactions() {
 async function loadSummary() {
   const summaryData = await apiFetch("/api/summary");
   document.getElementById("balanceValue").textContent = currency(summaryData.balance);
-  document.getElementById("reportIncomeValue").textContent = currency(summaryData.total_income);
-  document.getElementById("reportExpenseValue").textContent = currency(summaryData.total_expense);
-  lastMonthlyData = summaryData.monthly;
   lastByCategory = summaryData.by_category;
-
   renderCategoryTiles(lastByCategory);
-  renderCategoryChart(lastByCategory);
-  renderMonthlyBarChart(lastMonthlyData);
-  renderCashflowChart(lastMonthlyData);
 }
 
 // ---------------------------------------------------------------------------
@@ -489,133 +462,6 @@ function escapeHtml(str) {
 // ---------------------------------------------------------------------------
 function tilePalette() {
   return [cssVar("--primary"), "#16a34a", "#f59e0b", "#0ea5e9", "#e11d48", "#8b5cf6"];
-}
-
-function categoryPalette() {
-  return [cssVar("--primary"), "#16a34a", "#dc2626", "#f59e0b", "#0ea5e9", "#8a5cae", "#3aa7a0"];
-}
-
-function renderCategoryChart(byCategory) {
-  const ctx = document.getElementById("categoryChart");
-  const palette = categoryPalette();
-  const entries = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
-  const labels = entries.map(([cat]) => cat);
-  const values = entries.map(([, amt]) => amt);
-  const total = values.reduce((s, v) => s + v, 0);
-
-  document.getElementById("donutTotalValue").textContent = currency(total);
-
-  if (categoryChart) { categoryChart.destroy(); categoryChart = null; }
-
-  const legendList = document.getElementById("categoryLegendList");
-  if (!labels.length) {
-    ctx.getContext("2d").clearRect(0, 0, ctx.width, ctx.height);
-    legendList.innerHTML = '<li class="empty-state" style="padding:10px 0;">No expenses yet.</li>';
-    return;
-  }
-
-  legendList.innerHTML = entries.map(([cat, amt], i) => `
-    <li>
-      <span class="legend-name"><span class="legend-dot" style="background:${palette[i % palette.length]}"></span>${escapeHtml(cat)}</span>
-      <span class="legend-value">${currency(amt)}</span>
-    </li>
-  `).join("");
-
-  categoryChart = new Chart(ctx, {
-    type: "doughnut",
-    data: {
-      labels,
-      datasets: [{
-        data: values,
-        backgroundColor: palette,
-        borderWidth: 0,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      cutout: "72%",
-      plugins: { legend: { display: false } },
-    },
-  });
-}
-
-function renderMonthlyBarChart(monthly) {
-  const ctx = document.getElementById("monthlyBarChart");
-  const labels = Object.keys(monthly).map(monthLabel);
-  const income = Object.values(monthly).map((m) => m.income);
-  const expense = Object.values(monthly).map((m) => m.expense);
-  const gridColor = cssVar("--border");
-  const tickColor = cssVar("--muted");
-
-  if (monthlyBarChart) { monthlyBarChart.destroy(); monthlyBarChart = null; }
-
-  if (!labels.length) {
-    ctx.getContext("2d").clearRect(0, 0, ctx.width, ctx.height);
-    return;
-  }
-
-  monthlyBarChart = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [
-        { label: "Income", data: income, backgroundColor: cssVar("--income"), borderRadius: 4, maxBarThickness: 18 },
-        { label: "Expense", data: expense, backgroundColor: cssVar("--expense"), borderRadius: 4, maxBarThickness: 18 },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor } },
-        x: { grid: { display: false }, ticks: { color: tickColor } },
-      },
-    },
-  });
-}
-
-function renderCashflowChart(monthly) {
-  const ctx = document.getElementById("cashflowChart");
-  const labels = Object.keys(monthly).map(monthLabel);
-  const values = Object.values(monthly).map((m) => m[cashflowMode]);
-  const color = cashflowMode === "income" ? cssVar("--income") : cssVar("--expense");
-  const bg = `color-mix(in srgb, ${color} 14%, transparent)`;
-  const gridColor = cssVar("--border");
-  const tickColor = cssVar("--muted");
-
-  if (cashflowChart) { cashflowChart.destroy(); cashflowChart = null; }
-
-  if (!labels.length) {
-    ctx.getContext("2d").clearRect(0, 0, ctx.width, ctx.height);
-    return;
-  }
-
-  cashflowChart = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [{
-        label: cashflowMode === "income" ? "Income" : "Expense",
-        data: values,
-        borderColor: color,
-        backgroundColor: bg,
-        fill: true,
-        tension: 0.35,
-        pointRadius: 3,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor } },
-        x: { grid: { display: false }, ticks: { color: tickColor } },
-      },
-    },
-  });
 }
 
 // ---------------------------------------------------------------------------

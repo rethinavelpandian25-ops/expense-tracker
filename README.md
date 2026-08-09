@@ -31,8 +31,24 @@ vanilla HTML/CSS/JS frontend, Chart.js for charts, PostgreSQL on Render.
 - Dashboard also has its own one-click "download full history as PDF"
   button, for when you just want everything without visiting the
   Transactions page
-- Category breakdown chart (doughnut) and 6-month income vs. expense trend
-  (bar chart), plus a cashflow line chart on the dashboard's Reports section
+- **Reports page** (`/reports`, its own page) — replaces what used to be a
+  section on the dashboard:
+  - **Smart insights**: plain-language, actionable observations generated
+    from patterns in your own transaction history — biggest expense
+    category, month-over-month spending trend, your tightest month,
+    an unusually large transaction worth a second look, which income
+    source is most reliable to build savings around, and more. This is
+    rule-based statistical analysis (means, trends, variance) run fresh on
+    your data each time, not a trained ML model — labeled honestly as
+    such on the page, and it improves automatically as you log more
+    transactions, no training step involved
+  - Category breakdown chart (doughnut, with animated proportion bars in
+    the legend) and 6-month income vs. expense trend (bar chart), plus a
+    cashflow line chart
+  - An animated circular "this month's savings rate" gauge that
+    color-codes itself (green/amber/red) based on how healthy the rate is
+  - Count-up number animations, staggered card entrances, and tuned chart
+    animation timing throughout
 - **Settings page** (`/settings`, its own page) — everything about the
   signed-in person's account:
   - Upload/remove a profile photo (shown as the round avatar everywhere);
@@ -62,6 +78,7 @@ vanilla HTML/CSS/JS frontend, Chart.js for charts, PostgreSQL on Render.
 ```
 expense-tracker/
 ├── app.py                     # Flask app: routes, models, API
+├── insights.py                 # rule-based "smart insights" engine (pure Python, unit-testable)
 ├── migrate.py                 # one-time DB column migration (see below)
 ├── requirements.txt
 ├── render.yaml                 # Render deploy config (web service + Postgres)
@@ -73,8 +90,9 @@ expense-tracker/
 │   └── js/
 │       ├── auth.js             # login/signup form logic
 │       ├── password-toggle.js  # show/hide toggle, shared by login/signup/settings
-│       ├── dashboard.js        # dashboard: 7-recent preview, reports, charts
+│       ├── dashboard.js        # dashboard: 7-recent preview, top categories
 │       ├── transactions.js     # full Transactions page: filters, search, CRUD, PDF
+│       ├── reports.js          # Reports page: charts, insights rendering, animations
 │       └── settings.js         # settings page: profile, theme, appearance
 └── templates/
     ├── app_shell.html          # shared sidebar/topbar/modal layout (base template)
@@ -84,6 +102,7 @@ expense-tracker/
     ├── signup.html
     ├── dashboard.html           # extends app_shell.html — recent-transactions preview
     ├── transactions.html        # extends app_shell.html — full transaction history
+    ├── reports.html              # extends app_shell.html — charts + smart insights
     └── settings.html            # extends app_shell.html — account settings
 ```
 

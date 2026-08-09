@@ -10,6 +10,8 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import extract, inspect, text
 
+from insights import generate_insights
+
 # ---------------------------------------------------------------------------
 # App / DB setup
 # ---------------------------------------------------------------------------
@@ -181,6 +183,20 @@ def transactions_page():
         theme=current_user.theme or DEFAULT_THEME,
         appearance=current_user.appearance or DEFAULT_APPEARANCE,
         active_nav="history",
+    )
+
+
+@app.route("/reports", methods=["GET"])
+@login_required
+def reports_page():
+    return render_template(
+        "reports.html",
+        username=current_user.username,
+        email=current_user.email,
+        profile_pic=current_user.profile_pic,
+        theme=current_user.theme or DEFAULT_THEME,
+        appearance=current_user.appearance or DEFAULT_APPEARANCE,
+        active_nav="charts",
     )
 
 
@@ -531,6 +547,17 @@ def summary():
         "by_category": by_category,
         "monthly": monthly_sorted,
     })
+
+
+@app.route("/api/insights", methods=["GET"])
+@login_required
+def api_insights():
+    # generate_insights (insights.py) is plain Python with no DB/Flask
+    # dependencies — it just needs plain dicts shaped like Transaction rows,
+    # so all this route does is fetch and hand them over.
+    txns = Transaction.query.filter_by(user_id=current_user.id).all()
+    result = generate_insights([t.to_dict() for t in txns])
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------
