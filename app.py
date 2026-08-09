@@ -170,6 +170,20 @@ def dashboard():
     )
 
 
+@app.route("/transactions", methods=["GET"])
+@login_required
+def transactions_page():
+    return render_template(
+        "transactions.html",
+        username=current_user.username,
+        email=current_user.email,
+        profile_pic=current_user.profile_pic,
+        theme=current_user.theme or DEFAULT_THEME,
+        appearance=current_user.appearance or DEFAULT_APPEARANCE,
+        active_nav="history",
+    )
+
+
 @app.route("/settings", methods=["GET"])
 @login_required
 def settings_page():
@@ -371,6 +385,11 @@ def get_transactions():
     year = request.args.get("year", type=int)
     txn_type = request.args.get("type")
     category = request.args.get("category")
+    # Optional cap on how many rows come back — the dashboard's "recent
+    # transactions" preview uses this so it doesn't have to pull someone's
+    # entire history just to show the latest 7. Omit it (as the full
+    # Transactions page does) to get everything, same as before.
+    limit = request.args.get("limit", type=int)
 
     query = Transaction.query.filter_by(user_id=current_user.id)
     if month:
@@ -382,7 +401,11 @@ def get_transactions():
     if category:
         query = query.filter_by(category=category)
 
-    txns = query.order_by(Transaction.txn_date.desc(), Transaction.id.desc()).all()
+    query = query.order_by(Transaction.txn_date.desc(), Transaction.id.desc())
+    if limit:
+        query = query.limit(limit)
+
+    txns = query.all()
     return jsonify([t.to_dict() for t in txns])
 
 

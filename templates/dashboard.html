@@ -4,9 +4,7 @@
 
 {% block main_content %}
   <header class="topbar">
-    <div class="search-wrap">
-      <input type="text" id="searchInput" placeholder="Search category, note or amount…" />
-    </div>
+    <h1 class="page-title">Dashboard</h1>
     <div class="topbar-actions">
       <a class="avatar" id="avatarBtn" href="/settings" title="Settings" aria-label="Open settings"></a>
     </div>
@@ -32,19 +30,8 @@
 
   <section class="panel" id="history">
     <div class="panel-header">
-      <h2>Transaction history</h2>
-      <button class="btn-text" id="clearHistoryBtn">Clear all</button>
-    </div>
-
-    <div class="filters">
-      <select id="filterType">
-        <option value="">All types</option>
-        <option value="income">Income</option>
-        <option value="expense">Expense</option>
-      </select>
-      <select id="filterMonth">
-        <option value="">All months</option>
-      </select>
+      <h2>Recent transactions</h2>
+      <a class="btn-text" href="/transactions">View all</a>
     </div>
 
     <table class="txn-table">
@@ -64,6 +51,10 @@
     <div class="txn-cards" id="txnCards"></div>
 
     <div class="empty-state" id="emptyState" style="display:none;">No transactions yet — add your first one above.</div>
+
+    <div class="load-more-wrap" id="loadMoreWrap" style="display:none;">
+      <a class="btn-ghost-outline load-more-btn" href="/transactions" id="loadMoreBtn">Load more</a>
+    </div>
   </section>
 
   <section class="panel" id="charts">
@@ -160,23 +151,11 @@
       </form>
     </div>
   </div>
-
-  <!-- PDF export choice modal -->
-  <div class="modal-overlay" id="pdfModalOverlay">
-    <div class="modal small">
-      <h2>Download PDF</h2>
-      <p>Export exactly what's on screen right now, or your entire transaction history?</p>
-      <div class="modal-actions">
-        <button class="btn-ghost" id="pdfExportFiltered">Current view</button>
-        <button class="btn-solid" id="pdfExportAll">Full history</button>
-      </div>
-    </div>
-  </div>
 {% endblock %}
 
 {% block mobile_nav %}
   <a href="/dashboard#overview" data-target="overview" title="Dashboard" aria-label="Dashboard">{{ icon('dashboard') }}</a>
-  <button id="mobileSearchBtn" title="Search" aria-label="Search">{{ icon('search') }}</button>
+  <a href="/transactions" title="Transactions" aria-label="Transactions">{{ icon('transactions') }}</a>
   <button class="add-fab" id="mobileAddBtn" title="Add transaction" aria-label="Add transaction">{{ icon('plus') }}</button>
   <a href="/dashboard#charts" data-target="charts" title="Reports" aria-label="Reports">{{ icon('reports') }}</a>
   <a href="/settings" title="Settings" aria-label="Settings">{{ icon('settings') }}</a>

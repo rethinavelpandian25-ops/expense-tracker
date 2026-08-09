@@ -14,16 +14,27 @@ vanilla HTML/CSS/JS frontend, Chart.js for charts, PostgreSQL on Render.
 - Sign-up asks for date of birth and only creates the account if the
   person is 18 or older (checked in the browser for instant feedback, and
   re-checked on the server since that's the actual source of truth)
+- **Stay signed in** — logging in or signing up keeps you signed in on that
+  device/browser indefinitely (via a long-lived cookie), so you're not
+  asked to log in again until you explicitly log out
+- Show/hide toggle on every password field (login, signup, and all three
+  password fields in Settings)
 - Add, view, edit, and delete income/expense transactions with category,
   amount, date, note
-- Dashboard with balance, total income, total expense
+- Dashboard shows your balance, top categories, and only your **7 most
+  recent transactions**, with a "Load more" link to the full
+  **Transactions** page
+- **Transactions page** (`/transactions`, its own page) — the complete
+  history: filter by type/month, free-text search, edit/delete any entry,
+  Clear all, and PDF export with a choice between the current filtered
+  view or the full history
+- Dashboard also has its own one-click "download full history as PDF"
+  button, for when you just want everything without visiting the
+  Transactions page
 - Category breakdown chart (doughnut) and 6-month income vs. expense trend
-  (bar chart), plus a cashflow line chart
-- Filter history by type and month, free-text search across category/note/amount
-- One download button that exports a PDF (current filtered view or full
-  history) — this used to live in two places and now lives in one
-- **Settings page** — its own section in the nav, holding everything about
-  the signed-in person's account:
+  (bar chart), plus a cashflow line chart on the dashboard's Reports section
+- **Settings page** (`/settings`, its own page) — everything about the
+  signed-in person's account:
   - Upload/remove a profile photo (shown as the round avatar everywhere);
     the photo is resized and compressed in the browser before it's ever
     sent, so uploads stay small
@@ -32,38 +43,48 @@ vanilla HTML/CSS/JS frontend, Chart.js for charts, PostgreSQL on Render.
   - Switch appearance between light, dark, or system (system is the
     default, and it live-updates if the OS theme changes while the tab is
     open)
-  - Log out and delete account — both now ask for confirmation before
-    doing anything irreversible, same as the other destructive actions
-    (deleting a transaction, clearing history)
+  - Log out and delete account — both ask for confirmation before doing
+    anything irreversible, same as deleting a transaction or clearing history
 - Theme and appearance choices are saved per-account and re-applied on
-  every future login, on any device, with no flash of the wrong theme on
-  load
+  every future login, on any device, with no flash of the wrong theme on load
 - Icons on every main nav item (Dashboard, Transactions, Reports, Settings),
   desktop sidebar and mobile bottom bar alike
 - Fully responsive — sidebar nav on desktop, top bar + stacked cards on
-  mobile; the Reports page in particular got a pass to fix cramped/overflowing
-  chart cards on small screens
+  mobile
 - Subtle animations throughout (section transitions, modal entrances, hover
   states) that respect `prefers-reduced-motion`
+- Browser tab favicon (the ₹ mark), plus a web manifest for "add to home
+  screen" on mobile
 - Each user's data is isolated — user A can never see user B's transactions
 
 ## Project structure
 
 ```
 expense-tracker/
-├── app.py                 # Flask app: routes, models, API
+├── app.py                     # Flask app: routes, models, API
+├── migrate.py                 # one-time DB column migration (see below)
 ├── requirements.txt
-├── render.yaml             # Render deploy config (web service + Postgres)
+├── render.yaml                 # Render deploy config (web service + Postgres)
 ├── .env.example
 ├── static/
-│   ├── css/style.css       # design tokens, theme + dark-mode variables, layout
+│   ├── favicon.svg / favicon.ico / site.webmanifest
+│   ├── icons/                  # PNG favicons at every size browsers ask for
+│   ├── css/style.css           # design tokens, theme + dark-mode variables, layout
 │   └── js/
-│       ├── auth.js         # login/signup form logic
-│       └── dashboard.js    # dashboard logic, settings, theming, charts, API calls
+│       ├── auth.js             # login/signup form logic
+│       ├── password-toggle.js  # show/hide toggle, shared by login/signup/settings
+│       ├── dashboard.js        # dashboard: 7-recent preview, reports, charts
+│       ├── transactions.js     # full Transactions page: filters, search, CRUD, PDF
+│       └── settings.js         # settings page: profile, theme, appearance
 └── templates/
+    ├── app_shell.html          # shared sidebar/topbar/modal layout (base template)
+    ├── _icons.html             # shared inline-SVG icon macros
+    ├── _forms.html             # shared password-field macro (with show/hide button)
     ├── login.html
     ├── signup.html
-    └── dashboard.html
+    ├── dashboard.html           # extends app_shell.html — recent-transactions preview
+    ├── transactions.html        # extends app_shell.html — full transaction history
+    └── settings.html            # extends app_shell.html — account settings
 ```
 
 ## 1. Run it locally
@@ -96,12 +117,13 @@ Sign up for an account, and you're in. Locally, with no `DATABASE_URL`
 set, it automatically uses a SQLite file (`expenses.db`) so you don't
 need Postgres installed to develop.
 
-> **Already had `expenses.db` from before this update?** Delete it (or
-> point `DATABASE_URL` at a fresh database) before running the new
-> `app.py`. The User table picked up new columns (date of birth, profile
-> photo, theme, appearance) and there's no migration system yet — see
-> "Known simplifications" below — so `db.create_all()` won't retrofit
-> them onto an existing table.
+> **Schema changes / `migrate.py`:** the `User` table has picked up new
+> columns over time (date of birth, profile photo, theme, appearance).
+> `app.py` actually runs a small self-migration automatically on every
+> startup now (see `run_startup_migrations()` in `app.py`), so on Render
+> this fixes itself on the next deploy with no manual step. `migrate.py`
+> is kept as a standalone version of the same fix, for local use or any
+> environment where you'd rather run it by hand.
 
 ## 2. Push to GitHub
 
@@ -162,8 +184,9 @@ Being able to talk about what you'd add next is itself a good signal:
 - No password reset flow (would need an email service like SendGrid)
 - No CSRF token on forms (mitigated by `SameSite=Lax` cookies, but a
   dedicated CSRF library would be a good next step)
-- No database migrations — schema changes currently require recreating
-  tables; a real project would add `Flask-Migrate`
+- No formal database migration tool — `run_startup_migrations()` in
+  `app.py` handles the columns this project has added so far, but a
+  bigger schema change would still want `Flask-Migrate`
 - No rate limiting on login/signup endpoints
 - No email verification, so the age check at signup relies on the date
   of birth the person enters — there's no way to independently verify it

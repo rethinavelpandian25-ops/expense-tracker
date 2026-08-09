@@ -702,6 +702,21 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   padding: 30px 0;
 }
 
+.load-more-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.load-more-btn { min-width: 160px; justify-content: center; }
+
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 /* --------------------------------------------------------------------------
    Transaction table
    -------------------------------------------------------------------------- */

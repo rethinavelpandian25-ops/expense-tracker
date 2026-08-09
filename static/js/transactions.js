@@ -1,17 +1,9 @@
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
-const PREVIEW_LIMIT = 7;
-
-let allTransactions = []; // holds only the preview (<= PREVIEW_LIMIT rows) on this page
+let allTransactions = [];
 let modalSelectedType = "expense";
-let categoryChart = null;
-let monthlyBarChart = null;
-let cashflowChart = null;
 let confirmCallback = null;
-let cashflowMode = "income";
-let lastMonthlyData = {};
-let lastByCategory = {};
 
 // Populated server-side (see the inline script in app_shell.html) so the
 // page already knows the signed-in user without an extra round trip.
@@ -34,16 +26,19 @@ const monthLabel = (ymKey) => {
   return new Date(Number(y), Number(m) - 1).toLocaleString("default", { month: "short", year: "numeric" });
 };
 
-// Reads a live CSS custom property off <html> so chart colors always match
-// the current theme + light/dark appearance, instead of being baked in.
-const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-
 // ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
   renderAvatars();
-  setupSectionNav();
+
+  // Filters + search
+  document.getElementById("filterType").addEventListener("change", renderTransactions);
+  document.getElementById("filterMonth").addEventListener("change", renderTransactions);
+  document.getElementById("searchInput").addEventListener("input", renderTransactions);
+
+  // Clear history
+  document.getElementById("clearHistoryBtn").addEventListener("click", confirmClearHistory);
 
   // Add / edit transaction modal
   document.getElementById("addTxnOpenBtn").addEventListener("click", () => openTxnModal("add"));
@@ -61,12 +56,16 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // PDF export — the dashboard has no filters to choose a "current view"
-  // from (that lives on the full Transactions page now), so this is a
-  // single click straight to exporting everything.
-  document.getElementById("downloadPdfBtn").addEventListener("click", handleDashboardPdfExport);
+  // PDF export — offers current filtered view vs. full history, since this
+  // page is where the filters/search actually live.
+  document.getElementById("downloadPdfBtn").addEventListener("click", openPdfModal);
+  document.getElementById("pdfExportFiltered").addEventListener("click", () => { exportPdf(getFilteredTransactions(), "Current view"); closePdfModal(); });
+  document.getElementById("pdfExportAll").addEventListener("click", () => { exportPdf(allTransactions, "Full history"); closePdfModal(); });
+  document.getElementById("pdfModalOverlay").addEventListener("click", (e) => {
+    if (e.target.id === "pdfModalOverlay") closePdfModal();
+  });
 
-  // Generic confirm modal — used for deleting a transaction from the preview.
+  // Generic confirm modal
   document.getElementById("confirmCancel").addEventListener("click", closeConfirm);
   document.getElementById("confirmOk").addEventListener("click", async () => {
     const cb = confirmCallback;
@@ -77,17 +76,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.target.id === "confirmModalOverlay") closeConfirm();
   });
 
-  // Cashflow toggle
-  document.querySelectorAll(".pill-btn[data-cashflow]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".pill-btn[data-cashflow]").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      cashflowMode = btn.dataset.cashflow;
-      renderCashflowChart(lastMonthlyData);
-    });
-  });
-
-  loadEverything();
+  loadTransactions();
 });
 
 function renderAvatars() {
@@ -101,45 +90,6 @@ function renderAvatars() {
       el.textContent = (account.username || "?").charAt(0).toUpperCase();
     }
   });
-}
-
-// Dashboard/Reports links carry both a real href (so they work with no JS,
-// in a new tab, etc.) and a data-target matching a section id on THIS page.
-// When the target exists here, intercept the click for a smooth in-page
-// scroll instead of a full reload. When it doesn't (e.g. arriving from
-// another page), let the browser follow the href normally.
-function setupSectionNav() {
-  document.querySelectorAll("[data-target]").forEach((el) => {
-    el.addEventListener("click", (e) => {
-      const target = document.getElementById(el.dataset.target);
-      if (!target) return; // not on this page — let the link navigate normally
-      e.preventDefault();
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
-      if (history.replaceState) history.replaceState(null, "", `#${el.dataset.target}`);
-      document.querySelectorAll(".nav-link, .mobile-bottom-nav [data-target]").forEach((l) => l.classList.remove("active"));
-      document.querySelectorAll(`[data-target="${el.dataset.target}"]`).forEach((l) => {
-        if (l.classList.contains("nav-link") || l.closest(".mobile-bottom-nav")) l.classList.add("active");
-      });
-    });
-  });
-
-  // Arriving here via a link like /dashboard#charts (e.g. from the
-  // Settings page) — jump to that section and mark the right nav item.
-  if (location.hash) {
-    const target = document.querySelector(location.hash);
-    if (target) {
-      requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
-      const key = location.hash.slice(1);
-      document.querySelectorAll(".nav-link, .mobile-bottom-nav [data-target]").forEach((l) => l.classList.remove("active"));
-      document.querySelectorAll(`[data-target="${key}"]`).forEach((l) => {
-        if (l.classList.contains("nav-link") || l.closest(".mobile-bottom-nav")) l.classList.add("active");
-      });
-    }
-  }
-}
-
-async function loadEverything() {
-  await Promise.all([loadTransactions(), loadSummary()]);
 }
 
 // ---------------------------------------------------------------------------
@@ -160,28 +110,9 @@ async function apiFetch(url, options = {}) {
 }
 
 async function loadTransactions() {
-  // Ask for one more than we'll show — if that extra row comes back, there
-  // are more than PREVIEW_LIMIT transactions in total, so "Load more" is
-  // worth showing. This avoids a separate count endpoint.
-  const rows = await apiFetch(`/api/transactions?limit=${PREVIEW_LIMIT + 1}`);
-  const hasMore = rows.length > PREVIEW_LIMIT;
-  allTransactions = hasMore ? rows.slice(0, PREVIEW_LIMIT) : rows;
-  document.getElementById("loadMoreWrap").style.display = hasMore ? "flex" : "none";
+  allTransactions = await apiFetch("/api/transactions"); // no limit — the full list
+  populateMonthFilter();
   renderTransactions();
-}
-
-async function loadSummary() {
-  const summaryData = await apiFetch("/api/summary");
-  document.getElementById("balanceValue").textContent = currency(summaryData.balance);
-  document.getElementById("reportIncomeValue").textContent = currency(summaryData.total_income);
-  document.getElementById("reportExpenseValue").textContent = currency(summaryData.total_expense);
-  lastMonthlyData = summaryData.monthly;
-  lastByCategory = summaryData.by_category;
-
-  renderCategoryTiles(lastByCategory);
-  renderCategoryChart(lastByCategory);
-  renderMonthlyBarChart(lastMonthlyData);
-  renderCashflowChart(lastMonthlyData);
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +173,7 @@ async function handleTxnSubmit(e) {
       showToast("Transaction added.");
     }
     closeTxnModal();
-    await loadEverything();
+    await loadTransactions();
   } catch (err) {
     showToast(err.message);
   } finally {
@@ -255,11 +186,34 @@ function deleteTransaction(id) {
     try {
       await apiFetch(`/api/transactions/${id}`, { method: "DELETE" });
       showToast("Transaction deleted.");
-      await loadEverything();
+      await loadTransactions();
     } catch (err) {
       showToast(err.message);
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Clear history
+// ---------------------------------------------------------------------------
+function confirmClearHistory() {
+  if (!allTransactions.length) {
+    showToast("No transactions to clear.");
+    return;
+  }
+  openConfirm(
+    "Clear all transactions?",
+    `This permanently deletes all ${allTransactions.length} transaction${allTransactions.length === 1 ? "" : "s"}. This cannot be undone.`,
+    async () => {
+      try {
+        await apiFetch("/api/transactions/clear", { method: "DELETE" });
+        showToast("All transactions deleted.");
+        await loadTransactions();
+      } catch (err) {
+        showToast(err.message);
+      }
+    }
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -278,19 +232,18 @@ function closeConfirm() {
 }
 
 // ---------------------------------------------------------------------------
-// PDF export (dashboard: always the full history, no scope choice)
+// PDF export
 // ---------------------------------------------------------------------------
-async function handleDashboardPdfExport() {
-  const btn = document.getElementById("downloadPdfBtn");
-  btn.disabled = true;
-  try {
-    const all = await apiFetch("/api/transactions");
-    exportPdf(all, "Full history");
-  } catch (err) {
-    showToast(err.message);
-  } finally {
-    btn.disabled = false;
+function openPdfModal() {
+  if (!allTransactions.length) {
+    showToast("No transactions to export.");
+    return;
   }
+  document.getElementById("pdfModalOverlay").classList.add("show");
+}
+
+function closePdfModal() {
+  document.getElementById("pdfModalOverlay").classList.remove("show");
 }
 
 // Draws the transaction table using jsPDF's own core primitives (text +
@@ -364,7 +317,7 @@ function drawTransactionsTable(doc, rows, startY, rs) {
 
 function exportPdf(rows, scopeLabel) {
   if (!rows.length) {
-    showToast("No transactions to export.");
+    showToast("Nothing to export in that view.");
     return;
   }
 
@@ -407,40 +360,49 @@ function exportPdf(rows, scopeLabel) {
 }
 
 // ---------------------------------------------------------------------------
-// Rendering: category tiles
+// Rendering: filters
 // ---------------------------------------------------------------------------
-function renderCategoryTiles(byCategory) {
-  const wrap = document.getElementById("categoryTiles");
-  const palette = tilePalette();
-  const entries = Object.entries(byCategory).sort((a, b) => b[1] - a[1]).slice(0, 3);
+function populateMonthFilter() {
+  const select = document.getElementById("filterMonth");
+  const current = select.value;
+  const months = [...new Set(allTransactions.map((t) => t.date.slice(0, 7)))].sort().reverse();
 
-  if (!entries.length) {
-    wrap.innerHTML = '<div class="empty-state">No expenses yet — add a transaction to see your top categories.</div>';
-    return;
-  }
+  select.innerHTML = '<option value="">All months</option>' +
+    months.map((m) => `<option value="${m}">${monthLabel(m)}</option>`).join("");
+  select.value = current;
+}
 
-  wrap.innerHTML = entries.map(([cat, amt], i) => `
-    <div class="tile">
-      <div class="tile-icon" style="background:${palette[i % palette.length]}">${escapeHtml(cat.charAt(0).toUpperCase())}</div>
-      <div class="tile-info">
-        <div class="tile-value amount">${currency(amt)}</div>
-        <div class="tile-label">${escapeHtml(cat)}</div>
-      </div>
-    </div>
-  `).join("");
+function getFilteredTransactions() {
+  const type = document.getElementById("filterType").value;
+  const month = document.getElementById("filterMonth").value;
+  const q = document.getElementById("searchInput").value.trim().toLowerCase();
+
+  return allTransactions.filter((t) => {
+    if (type && t.type !== type) return false;
+    if (month && !t.date.startsWith(month)) return false;
+    if (q) {
+      const haystack = `${t.category} ${t.note || ""} ${t.amount}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
 }
 
 // ---------------------------------------------------------------------------
-// Rendering: recent-transactions preview (table + mobile cards)
+// Rendering: table + mobile cards
 // ---------------------------------------------------------------------------
 function renderTransactions() {
+  const txns = getFilteredTransactions();
   const tbody = document.getElementById("txnTableBody");
   const cardsWrap = document.getElementById("txnCards");
   const emptyState = document.getElementById("emptyState");
 
-  emptyState.style.display = allTransactions.length ? "none" : "block";
+  emptyState.style.display = txns.length ? "none" : "block";
+  emptyState.textContent = allTransactions.length
+    ? "No transactions match your search or filters."
+    : "No transactions yet — add your first one above.";
 
-  tbody.innerHTML = allTransactions.map((t) => `
+  tbody.innerHTML = txns.map((t) => `
     <tr>
       <td>${formatDate(t.date)}</td>
       <td><span class="stamp ${t.type}">${t.type === "income" ? "IN" : "OUT"}</span></td>
@@ -454,7 +416,7 @@ function renderTransactions() {
     </tr>
   `).join("");
 
-  cardsWrap.innerHTML = allTransactions.map((t) => `
+  cardsWrap.innerHTML = txns.map((t) => `
     <div class="txn-card">
       <div class="row1">
         <span class="stamp ${t.type}">${t.type === "income" ? "IN" : "OUT"}</span>
@@ -481,141 +443,6 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str || "";
   return div.innerHTML;
-}
-
-// ---------------------------------------------------------------------------
-// Charts — colors are read live from CSS variables so they always match the
-// current theme + light/dark appearance chosen in Settings.
-// ---------------------------------------------------------------------------
-function tilePalette() {
-  return [cssVar("--primary"), "#16a34a", "#f59e0b", "#0ea5e9", "#e11d48", "#8b5cf6"];
-}
-
-function categoryPalette() {
-  return [cssVar("--primary"), "#16a34a", "#dc2626", "#f59e0b", "#0ea5e9", "#8a5cae", "#3aa7a0"];
-}
-
-function renderCategoryChart(byCategory) {
-  const ctx = document.getElementById("categoryChart");
-  const palette = categoryPalette();
-  const entries = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
-  const labels = entries.map(([cat]) => cat);
-  const values = entries.map(([, amt]) => amt);
-  const total = values.reduce((s, v) => s + v, 0);
-
-  document.getElementById("donutTotalValue").textContent = currency(total);
-
-  if (categoryChart) { categoryChart.destroy(); categoryChart = null; }
-
-  const legendList = document.getElementById("categoryLegendList");
-  if (!labels.length) {
-    ctx.getContext("2d").clearRect(0, 0, ctx.width, ctx.height);
-    legendList.innerHTML = '<li class="empty-state" style="padding:10px 0;">No expenses yet.</li>';
-    return;
-  }
-
-  legendList.innerHTML = entries.map(([cat, amt], i) => `
-    <li>
-      <span class="legend-name"><span class="legend-dot" style="background:${palette[i % palette.length]}"></span>${escapeHtml(cat)}</span>
-      <span class="legend-value">${currency(amt)}</span>
-    </li>
-  `).join("");
-
-  categoryChart = new Chart(ctx, {
-    type: "doughnut",
-    data: {
-      labels,
-      datasets: [{
-        data: values,
-        backgroundColor: palette,
-        borderWidth: 0,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      cutout: "72%",
-      plugins: { legend: { display: false } },
-    },
-  });
-}
-
-function renderMonthlyBarChart(monthly) {
-  const ctx = document.getElementById("monthlyBarChart");
-  const labels = Object.keys(monthly).map(monthLabel);
-  const income = Object.values(monthly).map((m) => m.income);
-  const expense = Object.values(monthly).map((m) => m.expense);
-  const gridColor = cssVar("--border");
-  const tickColor = cssVar("--muted");
-
-  if (monthlyBarChart) { monthlyBarChart.destroy(); monthlyBarChart = null; }
-
-  if (!labels.length) {
-    ctx.getContext("2d").clearRect(0, 0, ctx.width, ctx.height);
-    return;
-  }
-
-  monthlyBarChart = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [
-        { label: "Income", data: income, backgroundColor: cssVar("--income"), borderRadius: 4, maxBarThickness: 18 },
-        { label: "Expense", data: expense, backgroundColor: cssVar("--expense"), borderRadius: 4, maxBarThickness: 18 },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor } },
-        x: { grid: { display: false }, ticks: { color: tickColor } },
-      },
-    },
-  });
-}
-
-function renderCashflowChart(monthly) {
-  const ctx = document.getElementById("cashflowChart");
-  const labels = Object.keys(monthly).map(monthLabel);
-  const values = Object.values(monthly).map((m) => m[cashflowMode]);
-  const color = cashflowMode === "income" ? cssVar("--income") : cssVar("--expense");
-  const bg = `color-mix(in srgb, ${color} 14%, transparent)`;
-  const gridColor = cssVar("--border");
-  const tickColor = cssVar("--muted");
-
-  if (cashflowChart) { cashflowChart.destroy(); cashflowChart = null; }
-
-  if (!labels.length) {
-    ctx.getContext("2d").clearRect(0, 0, ctx.width, ctx.height);
-    return;
-  }
-
-  cashflowChart = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [{
-        label: cashflowMode === "income" ? "Income" : "Expense",
-        data: values,
-        borderColor: color,
-        backgroundColor: bg,
-        fill: true,
-        tension: 0.35,
-        pointRadius: 3,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor } },
-        x: { grid: { display: false }, ticks: { color: tickColor } },
-      },
-    },
-  });
 }
 
 // ---------------------------------------------------------------------------
