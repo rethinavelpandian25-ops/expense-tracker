@@ -51,11 +51,15 @@
         <a class="nav-link {{ 'active' if active_nav == 'charts' }}" href="/reports">
           {{ icon('reports') }}<span>Reports</span>
         </a>
+        <a class="nav-link {{ 'active' if active_nav == 'money_flow' }}" href="/money-flow">
+          {{ icon('flow') }}<span>Money Flow</span>
+        </a>
         <a class="nav-link {{ 'active' if active_nav == 'settings' }}" href="/settings">
           {{ icon('settings') }}<span>Settings</span>
         </a>
       </nav>
 
+      {% block sidebar_footer %}
       <div class="sidebar-footer">
         <a class="profile-summary" href="/settings">
           <span class="avatar avatar-sm" id="sidebarAvatar"></span>
@@ -65,6 +69,7 @@
           </span>
         </a>
       </div>
+      {% endblock %}
     </aside>
 
     <main class="main">

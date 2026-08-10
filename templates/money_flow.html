@@ -1,0 +1,46 @@
+{% extends "app_shell.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Money Flow — Ledger{% endblock %}
+
+{% block main_content %}
+  <header class="topbar">
+    <h1 class="page-title">Money Flow</h1>
+    <div class="topbar-actions">
+      <a class="avatar" id="avatarBtn" href="/settings" title="Settings" aria-label="Open settings"></a>
+    </div>
+  </header>
+
+  <section class="panel" id="moneyFlowPanel">
+    <div class="panel-header">
+      <h2>Where your money comes from — and where it goes</h2>
+    </div>
+    <p class="field-hint sankey-caption">
+      Each ribbon's thickness is proportional to the amount. Income sources flow in on the
+      left through <strong>Income</strong>, then out to your expense categories and savings
+      on the right. Hover or tap a ribbon for the exact amount.
+    </p>
+
+    <div class="sankey-wrap" id="sankeyWrap">
+      <svg id="sankeySvg" class="sankey-svg" viewBox="0 0 960 520" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="sankey-tooltip" id="sankeyTooltip"></div>
+    </div>
+
+    <p class="field-hint" id="shortfallNote" style="display:none;"></p>
+
+    <div class="empty-state" id="sankeyEmptyState" style="display:none;">
+      Add at least one income and one expense transaction to see your money flow diagram.
+    </div>
+  </section>
+{% endblock %}
+
+{% block mobile_nav %}
+  <a href="/dashboard#overview" data-target="overview" title="Dashboard" aria-label="Dashboard">{{ icon('dashboard') }}</a>
+  <a href="/transactions" title="Transactions" aria-label="Transactions">{{ icon('transactions') }}</a>
+  <a href="/reports" title="Reports" aria-label="Reports">{{ icon('reports') }}</a>
+  <a href="/money-flow" class="active" title="Money Flow" aria-label="Money Flow">{{ icon('flow') }}</a>
+  <a href="/settings" title="Settings" aria-label="Settings">{{ icon('settings') }}</a>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script src="{{ url_for('static', filename='js/money-flow.js') }}"></script>
+{% endblock %}

@@ -2,12 +2,14 @@
 {% from "_icons.html" import icon %}
 {% block title %}Dashboard — Ledger{% endblock %}
 
+{% block sidebar_footer %}{% endblock %}
+
 {% block main_content %}
-  <header class="topbar">
-    <h1 class="page-title">Dashboard</h1>
-    <div class="topbar-actions">
-      <a class="avatar" id="avatarBtn" href="/settings" title="Settings" aria-label="Open settings"></a>
-    </div>
+  <header class="topbar dashboard-topbar">
+    <a class="dashboard-greeting" href="/settings" aria-label="Open settings">
+      <span class="avatar" id="avatarBtn"></span>
+      <span class="greeting-text">Hi, {{ username }}!</span>
+    </a>
   </header>
 
   <section id="overview">
@@ -100,6 +102,7 @@
   <a href="/transactions" title="Transactions" aria-label="Transactions">{{ icon('transactions') }}</a>
   <button class="add-fab" id="mobileAddBtn" title="Add transaction" aria-label="Add transaction">{{ icon('plus') }}</button>
   <a href="/reports" title="Reports" aria-label="Reports">{{ icon('reports') }}</a>
+  <a href="/money-flow" title="Money Flow" aria-label="Money Flow">{{ icon('flow') }}</a>
   <a href="/settings" title="Settings" aria-label="Settings">{{ icon('settings') }}</a>
 {% endblock %}
 

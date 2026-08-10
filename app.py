@@ -200,6 +200,20 @@ def reports_page():
     )
 
 
+@app.route("/money-flow", methods=["GET"])
+@login_required
+def money_flow_page():
+    return render_template(
+        "money_flow.html",
+        username=current_user.username,
+        email=current_user.email,
+        profile_pic=current_user.profile_pic,
+        theme=current_user.theme or DEFAULT_THEME,
+        appearance=current_user.appearance or DEFAULT_APPEARANCE,
+        active_nav="money_flow",
+    )
+
+
 @app.route("/settings", methods=["GET"])
 @login_required
 def settings_page():
@@ -558,6 +572,35 @@ def api_insights():
     txns = Transaction.query.filter_by(user_id=current_user.id).all()
     result = generate_insights([t.to_dict() for t in txns])
     return jsonify(result)
+
+
+@app.route("/api/money-flow", methods=["GET"])
+@login_required
+def api_money_flow():
+    # Totals by category, split by income vs. expense — everything the
+    # Money Flow (Sankey) diagram needs to draw income sources flowing
+    # into "Income" and back out to expense categories + savings.
+    txns = Transaction.query.filter_by(user_id=current_user.id).all()
+
+    income_by_category = {}
+    expense_by_category = {}
+    total_income = 0.0
+    total_expense = 0.0
+    for t in txns:
+        if t.type == "income":
+            income_by_category[t.category] = income_by_category.get(t.category, 0) + t.amount
+            total_income += t.amount
+        else:
+            expense_by_category[t.category] = expense_by_category.get(t.category, 0) + t.amount
+            total_expense += t.amount
+
+    return jsonify({
+        "income_by_category": income_by_category,
+        "expense_by_category": expense_by_category,
+        "total_income": round(total_income, 2),
+        "total_expense": round(total_expense, 2),
+        "savings": round(total_income - total_expense, 2),
+    })
 
 
 # ---------------------------------------------------------------------------
