@@ -6,12 +6,21 @@ let systemAppearanceMedia = null;
 
 // Populated server-side (see the inline script in app_shell.html) so the
 // page already knows the signed-in user without an extra round trip.
-const account = window.LEDGER_USER || { username: "", email: "", profile_pic: null, theme: "purple", appearance: "system" };
+const account = window.LEDGER_USER || { username: "", email: "", profile_pic: null, theme: "purple", appearance: "system", country: "India", currency_code: "INR", currency_symbol: "₹", currency_locale: "en-IN" };
+
+const COUNTRY_CURRENCIES = {
+  "India": ["INR","₹","en-IN"], "United States":["USD","$","en-US"], "United Kingdom":["GBP","£","en-GB"],
+  "European Union":["EUR","€","en-IE"], "Canada":["CAD","CA$","en-CA"], "Australia":["AUD","A$","en-AU"],
+  "Singapore":["SGD","S$","en-SG"], "United Arab Emirates":["AED","د.إ","en-AE"], "Japan":["JPY","¥","ja-JP"],
+  "China":["CNY","¥","zh-CN"], "South Korea":["KRW","₩","ko-KR"], "New Zealand":["NZD","NZ$","en-NZ"],
+  "Switzerland":["CHF","CHF","de-CH"], "South Africa":["ZAR","R","en-ZA"], "Brazil":["BRL","R$","pt-BR"]
+};
 
 document.addEventListener("DOMContentLoaded", () => {
   renderAvatars();
   document.getElementById("settingsEmail").textContent = account.email;
   document.getElementById("usernameInput").value = account.username;
+  document.getElementById("usernameDisplay").textContent = account.username;
 
   document.getElementById("settingsLogoutBtn").addEventListener("click", confirmLogout);
   document.getElementById("settingsDeleteBtn").addEventListener("click", confirmDeleteAccount);
@@ -21,6 +30,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("usernameForm").addEventListener("submit", handleUsernameSubmit);
   document.getElementById("passwordForm").addEventListener("submit", handlePasswordSubmit);
+  document.getElementById("editUsernameBtn").addEventListener("click", beginUsernameEdit);
+  document.getElementById("cancelUsernameBtn").addEventListener("click", cancelUsernameEdit);
+  initCountrySelect();
 
   document.querySelectorAll(".theme-swatch").forEach((btn) => {
     if (btn.dataset.theme === account.theme) btn.classList.add("active");
@@ -149,21 +161,59 @@ async function handleRemovePhoto() {
 // ---------------------------------------------------------------------------
 // Username / password
 // ---------------------------------------------------------------------------
+function beginUsernameEdit() {
+  document.getElementById("usernameView").style.display = "none";
+  document.getElementById("usernameForm").style.display = "flex";
+  const input = document.getElementById("usernameInput");
+  input.value = account.username; input.focus(); input.select();
+}
+
+function cancelUsernameEdit() {
+  document.getElementById("usernameForm").style.display = "none";
+  document.getElementById("usernameView").style.display = "flex";
+  document.getElementById("usernameInput").value = account.username;
+}
+
 async function handleUsernameSubmit(e) {
   e.preventDefault();
   const input = document.getElementById("usernameInput");
   const newUsername = input.value.trim();
   if (!newUsername) return;
-
   try {
     const res = await apiFetch("/api/account/username", { method: "PUT", body: JSON.stringify({ username: newUsername }) });
     account.username = res.username;
     document.getElementById("sidebarUsername").textContent = account.username;
+    document.getElementById("usernameDisplay").textContent = account.username;
     renderAvatars();
+    cancelUsernameEdit();
     showToast("Username updated.");
-  } catch (err) {
-    showToast(err.message);
-  }
+  } catch (err) { showToast(err.message); }
+}
+
+function initCountrySelect() {
+  const select = document.getElementById("countrySelect");
+  if (!select) return;
+  select.innerHTML = Object.keys(COUNTRY_CURRENCIES).map(c => `<option value="${c}">${c}</option>`).join("");
+  select.value = account.country || "India";
+  updateCurrencyPreview();
+  select.addEventListener("change", handleCountryChange);
+}
+
+function updateCurrencyPreview() {
+  const el = document.getElementById("currencyPreview");
+  if (!el) return;
+  el.textContent = `Currency: ${account.currency_code} (${account.currency_symbol}) · Example: ${account.currency_symbol}1,234.56`;
+}
+
+async function handleCountryChange(e) {
+  const country = e.target.value;
+  const [code, symbol, locale] = COUNTRY_CURRENCIES[country];
+  try {
+    const res = await apiFetch("/api/account/preferences", { method:"PUT", body:JSON.stringify({ country }) });
+    account.country = country; account.currency_code = res.currency_code || code; account.currency_symbol = res.currency_symbol || symbol; account.currency_locale = res.currency_locale || locale;
+    updateCurrencyPreview();
+    showToast(`Currency changed to ${account.currency_code}.`);
+  } catch (err) { e.target.value = account.country || "India"; showToast(err.message); }
 }
 
 async function handlePasswordSubmit(e) {

@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, date, timedelta
 
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
     login_required, current_user
@@ -9,8 +9,23 @@ from flask_login import (
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import extract, inspect, text
+from io import BytesIO
+import base64
+import re
 
 from insights import generate_insights
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+                                Image as RLImage, PageBreak, KeepTogether)
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import pdfmetrics
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 # ---------------------------------------------------------------------------
 # App / DB setup
@@ -81,6 +96,10 @@ class User(db.Model, UserMixin):
     profile_pic = db.Column(db.Text, nullable=True)  # base64 data URL, or NULL
     theme = db.Column(db.String(20), nullable=False, default=DEFAULT_THEME)
     appearance = db.Column(db.String(10), nullable=False, default=DEFAULT_APPEARANCE)
+    country = db.Column(db.String(60), nullable=False, default="India")
+    currency_code = db.Column(db.String(8), nullable=False, default="INR")
+    currency_symbol = db.Column(db.String(8), nullable=False, default="₹")
+    currency_locale = db.Column(db.String(30), nullable=False, default="en-IN")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     transactions = db.relationship(
@@ -100,6 +119,10 @@ class User(db.Model, UserMixin):
             "profile_pic": self.profile_pic,
             "theme": self.theme,
             "appearance": self.appearance,
+            "country": self.country,
+            "currency_code": self.currency_code,
+            "currency_symbol": self.currency_symbol,
+            "currency_locale": self.currency_locale,
         }
 
 
@@ -203,6 +226,8 @@ def reports_page():
 @app.route("/money-flow", methods=["GET"])
 @login_required
 def money_flow_page():
+    if "LedgerAndroid" in request.headers.get("User-Agent", ""):
+        return redirect(url_for("reports_page"))
     return render_template(
         "money_flow.html",
         username=current_user.username,
@@ -264,7 +289,7 @@ def api_signup():
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already registered."}), 409
 
-    user = User(username=username, email=email, dob=dob)
+    user = User(username=username, email=email, dob=dob, country="India", currency_code="INR", currency_symbol="₹", currency_locale="en-IN")
     user.set_password(password)
     db.session.add(user)
     db.session.commit()
@@ -381,12 +406,31 @@ def remove_profile_picture():
     return jsonify({"message": "Profile photo removed."}), 200
 
 
+COUNTRY_CURRENCIES = {
+    "India": {"code": "INR", "symbol": "₹", "locale": "en-IN"},
+    "United States": {"code": "USD", "symbol": "$", "locale": "en-US"},
+    "United Kingdom": {"code": "GBP", "symbol": "£", "locale": "en-GB"},
+    "European Union": {"code": "EUR", "symbol": "€", "locale": "en-IE"},
+    "Canada": {"code": "CAD", "symbol": "CA$", "locale": "en-CA"},
+    "Australia": {"code": "AUD", "symbol": "A$", "locale": "en-AU"},
+    "Singapore": {"code": "SGD", "symbol": "S$", "locale": "en-SG"},
+    "United Arab Emirates": {"code": "AED", "symbol": "د.إ", "locale": "en-AE"},
+    "Japan": {"code": "JPY", "symbol": "¥", "locale": "ja-JP"},
+    "China": {"code": "CNY", "symbol": "¥", "locale": "zh-CN"},
+    "South Korea": {"code": "KRW", "symbol": "₩", "locale": "ko-KR"},
+    "New Zealand": {"code": "NZD", "symbol": "NZ$", "locale": "en-NZ"},
+    "Switzerland": {"code": "CHF", "symbol": "CHF", "locale": "de-CH"},
+    "South Africa": {"code": "ZAR", "symbol": "R", "locale": "en-ZA"},
+    "Brazil": {"code": "BRL", "symbol": "R$", "locale": "pt-BR"},
+}
+
 @app.route("/api/account/preferences", methods=["PUT"])
 @login_required
 def update_preferences():
     data = request.get_json(silent=True) or {}
     theme = data.get("theme")
     appearance = data.get("appearance")
+    country = data.get("country")
 
     if theme is not None:
         if theme not in VALID_THEMES:
@@ -395,13 +439,24 @@ def update_preferences():
     if appearance is not None:
         if appearance not in VALID_APPEARANCES:
             return jsonify({"error": "Unknown appearance mode."}), 400
-        current_user.appearance = appearance
+    if country is not None:
+        if country not in COUNTRY_CURRENCIES:
+            return jsonify({"error": "Unknown country."}), 400
+        c = COUNTRY_CURRENCIES[country]
+        current_user.country = country
+        current_user.currency_code = c["code"]
+        current_user.currency_symbol = c["symbol"]
+        current_user.currency_locale = c["locale"]
 
     db.session.commit()
     return jsonify({
         "message": "Preferences saved.",
         "theme": current_user.theme,
         "appearance": current_user.appearance,
+        "country": current_user.country,
+        "currency_code": current_user.currency_code,
+        "currency_symbol": current_user.currency_symbol,
+        "currency_locale": current_user.currency_locale,
     }), 200
 
 
@@ -574,6 +629,120 @@ def api_insights():
     return jsonify(result)
 
 
+@app.route("/api/reports/pdf", methods=["GET"])
+@login_required
+def reports_pdf():
+    """Generate a polished, self-contained financial report PDF."""
+    txns = Transaction.query.filter_by(user_id=current_user.id).order_by(Transaction.txn_date.asc(), Transaction.id.asc()).all()
+    income = sum(float(t.amount) for t in txns if t.type == "income")
+    expense = sum(float(t.amount) for t in txns if t.type == "expense")
+    balance = income - expense
+    by_cat = {}
+    monthly = {}
+    for t in txns:
+        if t.type == "expense":
+            by_cat[t.category] = by_cat.get(t.category, 0) + float(t.amount)
+        key = t.txn_date.strftime("%Y-%m")
+        monthly.setdefault(key, {"income": 0, "expense": 0})[t.type] += float(t.amount)
+
+    insights = generate_insights([t.to_dict() for t in txns])
+    symbol = current_user.currency_symbol or "₹"
+
+    def money(v):
+        return f"{symbol}{v:,.2f}"
+
+    def chart_png(kind):
+        fig, ax = plt.subplots(figsize=(8.5, 3.5), dpi=150)
+        fig.patch.set_alpha(0)
+        if kind == "monthly":
+            keys = list(monthly.keys())[-8:]
+            inc = [monthly[k]["income"] for k in keys]
+            exp = [monthly[k]["expense"] for k in keys]
+            x = list(range(len(keys)))
+            w = 0.36
+            ax.bar([i-w/2 for i in x], inc, width=w, label="Income", color="#16a34a", alpha=.9)
+            ax.bar([i+w/2 for i in x], exp, width=w, label="Expense", color="#ef4444", alpha=.9)
+            ax.set_xticks(x, [k[2:] for k in keys])
+            ax.set_title("Monthly Income vs Expense")
+        elif kind == "category":
+            items = sorted(by_cat.items(), key=lambda x: x[1], reverse=True)[:8]
+            if items:
+                labels = [x[0] for x in items]
+                vals = [x[1] for x in items]
+                ax.barh(labels[::-1], vals[::-1], color="#6366f1", alpha=.9)
+            ax.set_title("Expense Categories")
+        else:
+            keys = list(monthly.keys())[-8:]
+            net = [monthly[k]["income"] - monthly[k]["expense"] for k in keys]
+            inc = [monthly[k]["income"] for k in keys]
+            exp = [monthly[k]["expense"] for k in keys]
+            ax.plot(keys, inc, marker="o", linewidth=2.2, color="#16a34a", label="Income")
+            ax.plot(keys, exp, marker="o", linewidth=2.2, color="#ef4444", label="Expense")
+            ax.bar(keys, net, alpha=.16, color="#6366f1", label="Net cash flow")
+            ax.axhline(0, linewidth=1, color="#64748b")
+            ax.set_title("Cash Flow")
+        ax.grid(axis="y", alpha=.16)
+        ax.tick_params(axis="x", rotation=0, labelsize=8)
+        ax.tick_params(axis="y", labelsize=8)
+        ax.legend(fontsize=8, frameon=False)
+        fig.tight_layout()
+        out = BytesIO(); fig.savefig(out, format="png", bbox_inches="tight", transparent=True); plt.close(fig); out.seek(0)
+        return out
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=16*mm, leftMargin=16*mm, topMargin=15*mm, bottomMargin=15*mm)
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="ReportTitle", parent=styles["Title"], fontSize=22, leading=26, textColor=colors.HexColor("#111827"), spaceAfter=4))
+    styles.add(ParagraphStyle(name="SmallMuted", parent=styles["Normal"], fontSize=8.5, textColor=colors.HexColor("#64748b"), leading=12))
+    styles.add(ParagraphStyle(name="Section", parent=styles["Heading2"], fontSize=13, leading=16, textColor=colors.HexColor("#312e81"), spaceBefore=9, spaceAfter=6))
+    styles.add(ParagraphStyle(name="Body2", parent=styles["BodyText"], fontSize=9.2, leading=13, textColor=colors.HexColor("#334155")))
+
+    story=[]
+    header_data=[]
+    if current_user.profile_pic and current_user.profile_pic.startswith("data:image/"):
+        try:
+            raw = base64.b64decode(current_user.profile_pic.split(",",1)[1])
+            avatar = RLImage(BytesIO(raw), width=22*mm, height=22*mm)
+        except Exception:
+            avatar = Paragraph("", styles["Body2"])
+    else:
+        avatar = Paragraph(f"<b>{(current_user.username or '?')[0].upper()}</b>", ParagraphStyle(name="AvatarText", parent=styles["Body2"], fontSize=20, alignment=TA_CENTER, textColor=colors.white, backColor=colors.HexColor("#6366f1"), leading=22*mm))
+    header_text = [Paragraph("Ledger Financial Report", styles["ReportTitle"]), Paragraph(f"{current_user.username} · {current_user.email}", styles["Body2"]), Paragraph(f"Country: {current_user.country} · Currency: {current_user.currency_code} ({symbol})", styles["SmallMuted"]), Paragraph(f"Generated {datetime.now().strftime('%d %b %Y, %I:%M %p')}", styles["SmallMuted"])]
+    t=Table([[avatar, header_text]], colWidths=[28*mm, 145*mm])
+    t.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'MIDDLE'),('BACKGROUND',(0,0),(0,0),colors.HexColor('#6366f1')),('BOX',(0,0),(0,0),0,colors.white),('LEFTPADDING',(1,0),(1,0),8)]))
+    story += [t, Spacer(1,8)]
+
+    stats=[[Paragraph("Total income",styles["SmallMuted"]),Paragraph("Total expense",styles["SmallMuted"]),Paragraph("Net balance",styles["SmallMuted"]),Paragraph("Savings rate",styles["SmallMuted"])], [Paragraph(f"<b>{money(income)}</b>",styles["Body2"]),Paragraph(f"<b>{money(expense)}</b>",styles["Body2"]),Paragraph(f"<b>{money(balance)}</b>",styles["Body2"]),Paragraph(f"<b>{(balance/income*100 if income else 0):.1f}%</b>",styles["Body2"])]]
+    st=Table(stats,colWidths=[43*mm]*4)
+    st.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),colors.HexColor('#f8fafc')),('BOX',(0,0),(-1,-1),0.5,colors.HexColor('#e2e8f0')),('INNERGRID',(0,0),(-1,-1),0.35,colors.HexColor('#e2e8f0')),('VALIGN',(0,0),(-1,-1),'MIDDLE'),('TOPPADDING',(0,0),(-1,-1),7),('BOTTOMPADDING',(0,0),(-1,-1),7)]))
+    story += [st, Paragraph("Charts & cash-flow analysis", styles["Section"])]
+    for kind in ("monthly","category","cashflow"):
+        story.append(RLImage(chart_png(kind), width=175*mm, height=72*mm))
+        story.append(Spacer(1,4))
+
+    story.append(Paragraph("Transaction details", styles["Section"]))
+    rows=[["Date","Type","Category","Note","Amount"]]
+    for t in txns:
+        rows.append([t.txn_date.strftime("%d %b %Y"),t.type.title(),t.category,(t.note or "—")[:55],money(float(t.amount))])
+    if len(rows)==1: rows.append(["—","—","No transactions","Add transactions to build your report.","—"])
+    table=Table(rows,colWidths=[24*mm,20*mm,30*mm,67*mm,30*mm],repeatRows=1)
+    table.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#312e81')),('TEXTCOLOR',(0,0),(-1,0),colors.white),('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),('FONTSIZE',(0,0),(-1,-1),7.5),('GRID',(0,0),(-1,-1),0.3,colors.HexColor('#e2e8f0')),('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white,colors.HexColor('#f8fafc')]),('VALIGN',(0,0),(-1,-1),'TOP'),('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5)]))
+    story.append(table)
+
+    story.append(Paragraph("Smart insights", styles["Section"]))
+    if insights.get("insights"):
+        for ins in insights["insights"]:
+            story.append(KeepTogether([Paragraph(f"<b>{ins.get('title','Insight')}</b>", styles["Body2"]), Paragraph(ins.get("message", ""), styles["SmallMuted"]), Spacer(1,4)]))
+    else:
+        story.append(Paragraph("Not enough transaction history for personalized insights yet.", styles["Body2"]))
+
+    story.append(Spacer(1,8))
+    story.append(Paragraph("This report is generated from your Ledger transaction history. Smart insights are informational and not financial advice.", styles["SmallMuted"]))
+    doc.build(story)
+    buf.seek(0)
+    filename = f"ledger-report-{date.today().isoformat()}.pdf"
+    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=filename)
+
 @app.route("/api/money-flow", methods=["GET"])
 @login_required
 def api_money_flow():
@@ -643,6 +812,10 @@ def run_startup_migrations():
         "profile_pic": "TEXT",
         "theme": "VARCHAR(20) NOT NULL DEFAULT 'purple'",
         "appearance": "VARCHAR(10) NOT NULL DEFAULT 'system'",
+        "country": "VARCHAR(60) NOT NULL DEFAULT 'India'",
+        "currency_code": "VARCHAR(8) NOT NULL DEFAULT 'INR'",
+        "currency_symbol": "VARCHAR(8) NOT NULL DEFAULT '₹'",
+        "currency_locale": "VARCHAR(30) NOT NULL DEFAULT 'en-IN'",
     }
     with db.engine.begin() as conn:
         for name, coltype in new_columns.items():
