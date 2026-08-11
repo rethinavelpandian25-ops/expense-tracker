@@ -10,11 +10,6 @@
   <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
   <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
   <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
-  <meta name="theme-color" content="#6d28d9">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Ledger">
   <script>
     // Apply the signed-in user's saved theme + appearance before the
     // stylesheet paints anything, so there's no flash of the default
@@ -42,7 +37,7 @@
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
-        <div class="mark">₹</div>
+        <div class="mark">{{ current_user.currency_symbol or "₹" }}</div>
         <span>Ledger</span>
       </div>
 
@@ -56,8 +51,8 @@
         <a class="nav-link {{ 'active' if active_nav == 'charts' }}" href="/reports">
           {{ icon('reports') }}<span>Reports</span>
         </a>
-        <a class="nav-link {{ 'active' if active_nav == 'money_flow' }}" href="/money-flow">
-          {{ icon('flow') }}<span>Money Flow</span>
+        <a class="nav-link desktop-only-nav {{ 'active' if active_nav == 'money_flow' }}" href="/money-flow">
+          {{ icon('flow') }}<span>Cash Flow Graph</span>
         </a>
         <a class="nav-link {{ 'active' if active_nav == 'settings' }}" href="/settings">
           {{ icon('settings') }}<span>Settings</span>
@@ -66,13 +61,13 @@
 
       {% block sidebar_footer %}
       <div class="sidebar-footer">
-        <a class="profile-summary" href="/settings">
+        <div class="profile-summary">
           <span class="avatar avatar-sm" id="sidebarAvatar"></span>
           <span class="profile-summary-text">
             <span class="greeting">Signed in as</span>
             <span class="username" id="sidebarUsername">{{ username }}</span>
           </span>
-        </a>
+        </div>
       </div>
       {% endblock %}
     </aside>
@@ -108,16 +103,18 @@
       email: {{ email|tojson }},
       profile_pic: {{ profile_pic|tojson }},
       theme: {{ theme|tojson }},
-      appearance: {{ appearance|tojson }}
+      appearance: {{ appearance|tojson }},
+      country: {{ current_user.country|tojson }},
+      currency_code: {{ current_user.currency_code|tojson }},
+      currency_symbol: {{ current_user.currency_symbol|tojson }},
+      currency_locale: {{ current_user.currency_locale|tojson }}
     };
-    // Registering this is what makes the app installable as a standalone
-    // Android app (via PWABuilder/TWA) — see static/sw.js for exactly what
-    // it does and, just as importantly, what it deliberately doesn't cache.
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/static/sw.js").catch(() => { /* non-fatal — app still works normally */ });
-      });
-    }
+  </script>
+  <script>
+    (function(){
+      var isMobile = window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
+      if (isMobile && window.location.pathname === "/money-flow") window.location.replace("/reports");
+    })();
   </script>
   {% block extra_scripts %}{% endblock %}
 </body>

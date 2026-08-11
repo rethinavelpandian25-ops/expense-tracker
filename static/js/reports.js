@@ -4,15 +4,17 @@
 let categoryChart = null;
 let monthlyBarChart = null;
 let cashflowChart = null;
-let cashflowMode = "income";
 let lastMonthlyData = {};
 
 // Populated server-side (see the inline script in app_shell.html) so the
 // page already knows the signed-in user without an extra round trip.
-const account = window.LEDGER_USER || { username: "", profile_pic: null };
+const account = window.LEDGER_USER || { username: "", profile_pic: null, currency_symbol: "₹", currency_locale: "en-IN" };
 
-const currency = (n) =>
-  "₹" + Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const currency = (n) => {
+  const symbol = account.currency_symbol || "₹";
+  const locale = account.currency_locale || "en-IN";
+  return symbol + Number(n).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
 
 const monthLabel = (ymKey) => {
   const [y, m] = ymKey.split("-");
@@ -44,15 +46,8 @@ const SEVERITY_ICONS = {
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
   renderAvatars();
-
-  document.querySelectorAll(".pill-btn[data-cashflow]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".pill-btn[data-cashflow]").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      cashflowMode = btn.dataset.cashflow;
-      renderCashflowChart(lastMonthlyData);
-    });
-  });
+  const pdfBtn = document.getElementById("downloadPdfBtn");
+  if (pdfBtn) pdfBtn.addEventListener("click", () => { window.location.href = "/api/reports/pdf"; });
 
   loadReports();
 });
@@ -88,8 +83,18 @@ async function apiFetch(url, options = {}) {
 }
 
 async function loadReports() {
-  const [summaryData] = await Promise.all([loadSummary(), loadInsights()]);
+  const [summaryData] = await Promise.all([loadSummary(), loadInsights(), loadReportCashflow()]);
   return summaryData;
+}
+
+async function loadReportCashflow() {
+  try {
+    const data = await apiFetch("/api/money-flow");
+    renderCashflowChart(data);
+  } catch (err) {
+    const svg = document.getElementById("cashflowChart");
+    if (svg) svg.innerHTML = "";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -296,48 +301,44 @@ function renderMonthlyBarChart(monthly) {
   });
 }
 
-function renderCashflowChart(monthly) {
-  const ctx = document.getElementById("cashflowChart");
-  const labels = Object.keys(monthly).map(monthLabel);
-  const values = Object.values(monthly).map((m) => m[cashflowMode]);
-  const color = cashflowMode === "income" ? cssVar("--income") : cssVar("--expense");
-  const bg = `color-mix(in srgb, ${color} 14%, transparent)`;
-  const gridColor = cssVar("--border");
-  const tickColor = cssVar("--muted");
-
-  if (cashflowChart) { cashflowChart.destroy(); cashflowChart = null; }
-
-  if (!labels.length) {
-    ctx.getContext("2d").clearRect(0, 0, ctx.width, ctx.height);
-    return;
-  }
-
-  cashflowChart = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [{
-        label: cashflowMode === "income" ? "Income" : "Expense",
-        data: values,
-        borderColor: color,
-        backgroundColor: bg,
-        fill: true,
-        tension: 0.35,
-        pointRadius: 3,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      animation: { duration: 900, easing: "easeOutQuart" },
-      scales: {
-        y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor } },
-        x: { grid: { display: false }, ticks: { color: tickColor } },
-      },
-    },
-  });
+function renderCashflowChart(data) {
+  const svg = document.getElementById("cashflowChart");
+  const tooltip = document.getElementById("reportFlowTooltip");
+  if (!svg) return;
+  svg.innerHTML = "";
+  const income = Object.entries(data.income_by_category || {}).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,7);
+  const expenses = Object.entries(data.expense_by_category || {}).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,9);
+  const savings = Math.max(0, Number(data.savings)||0);
+  if (!income.length || !expenses.length) return;
+  const width=980, height=Math.max(300,(income.length+expenses.length)*25), nodeW=14, gap=8;
+  svg.setAttribute("viewBox",`0 0 ${width} ${height+35}`);
+  const ns="http://www.w3.org/2000/svg";
+  const el=(tag,attrs={})=>{const x=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>x.setAttribute(k,v));return x;};
+  const paletteIn=["#2563eb","#0ea5e9","#0d9488","#6366f1","#0891b2","#64748b","#14b8a6"];
+  const paletteEx=["#dc2626","#f97316","#d946ef","#e11d48","#c2410c","#a855f7","#ef4444","#f43f5e","#fb7185"];
+  const totalIncome=income.reduce((s,[,v])=>s+v,0);
+  const right=[...expenses.map((n,i)=>({id:n[0],value:n[1],color:paletteEx[i%paletteEx.length]}))];
+  if(savings>0) right.push({id:"Savings",value:savings,color:"#16a34a"});
+  const left=income.map((n,i)=>({id:n[0],value:n[1],color:paletteIn[i%paletteIn.length]}));
+  const total=totalIncome||1;
+  const plotH=height-10;
+  const distribute=(nodes)=>{let y=0; const totalGap=gap*(nodes.length-1); const avail=Math.max(20,plotH-totalGap); return nodes.map(n=>{const h=Math.max(7,n.value/total*avail);const out={...n,y0:y,y1:y+h};y+=h+gap;return out;});};
+  const L=distribute(left), R=distribute(right);
+  const midX=width/2, leftX=18, rightX=width-nodeW-18, hubX=midX-nodeW/2;
+  const g=el("g",{transform:"translate(0,18)"}); svg.appendChild(g);
+  const slot=(nodes)=>{let y=0;return nodes.map(n=>{const h=n.value/total*plotH;const out={y0:y,y1:y+h};y+=h;return out;});};
+  const LS=slot(L), RS=slot(R);
+  const pathFor=(x0,x1,a,b,color,label,value)=>{const mid=(x0+x1)/2;const p=el("path",{d:`M${x0},${a.y0} C${mid},${a.y0} ${mid},${b.y0} ${x1},${b.y0} L${x1},${b.y1} C${mid},${b.y1} ${mid},${a.y1} ${x0},${a.y1} Z`,fill:color,class:"sankey-link"});p.addEventListener("mouseenter",e=>{if(!tooltip)return;tooltip.textContent=`${label}: ${currency(value)}`;tooltip.classList.add("show");tooltip.style.left=`${Math.min(e.offsetX+10,Math.max(0,svg.clientWidth-220))}px`;tooltip.style.top=`${Math.max(8,e.offsetY-10)}px`;});p.addEventListener("mouseleave",()=>tooltip&&tooltip.classList.remove("show"));g.appendChild(p);};
+  L.forEach((n,i)=>pathFor(leftX+nodeW,hubX,{y0:n.y0,y1:n.y1},{y0:LS[i].y0,y1:LS[i].y1},n.color,n.id,n.value));
+  R.forEach((n,i)=>pathFor(hubX+nodeW,rightX,{y0:RS[i].y0,y1:RS[i].y1},{y0:n.y0,y1:n.y1},n.color,n.id,n.value));
+  L.forEach(n=>g.appendChild(el("rect",{x:leftX,y:n.y0,width:nodeW,height:Math.max(2,n.y1-n.y0),rx:4,fill:n.color,class:"sankey-node-animated"})));
+  R.forEach(n=>g.appendChild(el("rect",{x:rightX,y:n.y0,width:nodeW,height:Math.max(2,n.y1-n.y0),rx:4,fill:n.color,class:"sankey-node-animated"})));
+  g.appendChild(el("rect",{x:hubX,y:0,width:nodeW,height:plotH,rx:5,fill:"#6366f1",class:"sankey-node-animated"}));
+  const title=el("text",{x:midX,y:-2,"text-anchor":"middle",class:"sankey-hub-label",fill:cssVar("--ink")}); title.textContent="Income → Expenses + Savings"; g.appendChild(title);
+  L.forEach(n=>{const t=el("text",{x:leftX+nodeW+8,y:n.y0+12,class:"sankey-label",fill:cssVar("--ink")});t.textContent=`${n.id} · ${currency(n.value)}`;g.appendChild(t);});
+  R.forEach(n=>{const t=el("text",{x:rightX-8,y:n.y0+12,"text-anchor":"end",class:"sankey-label",fill:cssVar("--ink")});t.textContent=`${n.id} · ${currency(n.value)}`;g.appendChild(t);});
 }
+
 
 // ---------------------------------------------------------------------------
 // Smart insights

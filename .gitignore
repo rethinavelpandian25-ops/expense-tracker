@@ -6,13 +6,3 @@ venv/
 *.db
 instance/
 .DS_Store
-
-# mobile/ (Capacitor Android app scaffold — see mobile/README.md)
-mobile/node_modules/
-mobile/android/
-mobile/.gradle/
-mobile/build/
-*.apk
-*.aab
-*.keystore
-*.jks

@@ -10,10 +10,13 @@ let lastByCategory = {};
 
 // Populated server-side (see the inline script in app_shell.html) so the
 // page already knows the signed-in user without an extra round trip.
-const account = window.LEDGER_USER || { username: "", profile_pic: null };
+const account = window.LEDGER_USER || { username: "", profile_pic: null, currency_symbol: "₹", currency_locale: "en-IN" };
 
-const currency = (n) =>
-  "₹" + Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const currency = (n) => {
+  const symbol = account.currency_symbol || "₹";
+  const locale = account.currency_locale || "en-IN";
+  return symbol + Number(n).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
 
 // input[type=date].valueAsDate reads/writes in UTC, which shows the wrong
 // day for timezones ahead of UTC during early morning hours. Build the
@@ -66,14 +69,6 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("confirmModalOverlay").addEventListener("click", (e) => {
     if (e.target.id === "confirmModalOverlay") closeConfirm();
   });
-
-  // Supports the "Add transaction" home-screen shortcut (see
-  // static/site.webmanifest) — installed Android apps can jump straight
-  // into the Add form via a long-press shortcut, same as a native app.
-  if (new URLSearchParams(location.search).get("action") === "add") {
-    openTxnModal("add");
-    history.replaceState(null, "", "/dashboard");
-  }
 
   loadEverything();
 });
