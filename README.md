@@ -196,6 +196,21 @@ Either way, once it's live, Render gives you a public URL like
 > mind if you ever move to storing larger files — you'd want S3/Cloud
 > Storage instead of the database at that point.
 
+## Running this as an Android app
+
+The web app is already a fully installable Progressive Web App (manifest,
+service worker, icons at every required size) — that's what makes it
+possible to turn into a real Android app without rewriting anything. See
+**[`mobile/README.md`](mobile/README.md)** for two ways to do it:
+
+- **PWABuilder** — generate a signed, installable `.apk` from your live URL
+  in about 10 minutes, no coding tools needed.
+- **Capacitor** — a proper Android Studio project for Play Store
+  publishing or adding native features later.
+
+Both just load your live deployed site inside a native Android shell, so
+new features you add to the web app show up in the Android app automatically.
+
 ## Known simplifications (worth knowing for an interview)
 
 Being able to talk about what you'd add next is itself a good signal:

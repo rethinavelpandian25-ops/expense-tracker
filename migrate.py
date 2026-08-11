@@ -43,10 +43,6 @@ new_columns = {
     "profile_pic": "TEXT",
     "theme": "VARCHAR(20) NOT NULL DEFAULT 'purple'",
     "appearance": "VARCHAR(10) NOT NULL DEFAULT 'system'",
-    "country": "VARCHAR(60) NOT NULL DEFAULT 'India'",
-    "currency_code": "VARCHAR(8) NOT NULL DEFAULT 'INR'",
-    "currency_symbol": "VARCHAR(8) NOT NULL DEFAULT '₹'",
-    "currency_locale": "VARCHAR(30) NOT NULL DEFAULT 'en-IN'",
 }
 
 with engine.begin() as conn:

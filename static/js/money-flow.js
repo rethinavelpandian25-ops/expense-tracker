@@ -7,16 +7,13 @@
 // for something this central to the page.
 // ---------------------------------------------------------------------------
 
-const MAX_INCOME_NODES = 10;   // top N income categories; rest collapse into "Other income"
-const MAX_EXPENSE_NODES = 12;  // top N expense categories; rest collapse into "Other expenses"
+const MAX_INCOME_NODES = 5;   // top N income categories; rest collapse into "Other income"
+const MAX_EXPENSE_NODES = 7;  // top N expense categories; rest collapse into "Other expenses"
 
-const account = window.LEDGER_USER || { username: "", profile_pic: null, currency_symbol: "₹", currency_locale: "en-IN" };
+const account = window.LEDGER_USER || { username: "", profile_pic: null };
 
-const currency = (n) => {
-  const symbol = account.currency_symbol || "₹";
-  const locale = account.currency_locale || "en-IN";
-  return symbol + Number(n).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
+const currency = (n) =>
+  "₹" + Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
@@ -110,12 +107,12 @@ function renderMoneyFlow(data) {
 // Layout
 // ---------------------------------------------------------------------------
 function layoutColumn(nodes, height, gap) {
-  const total = nodes.reduce((s, n) => s + (n.visualValue ?? n.value), 0) || 1;
+  const total = nodes.reduce((s, n) => s + n.value, 0) || 1;
   const totalGap = gap * Math.max(0, nodes.length - 1);
   const avail = Math.max(0, height - totalGap);
   let y = 0;
   nodes.forEach((n) => {
-    const h = Math.max(6, ((n.visualValue ?? n.value) / total) * avail);
+    const h = Math.max(6, (n.value / total) * avail);
     n.y0 = y;
     n.y1 = y + h;
     y += h + gap;
@@ -171,7 +168,7 @@ function buildSankeyModel(incomeEntries, expenseEntries, savings, width, height)
       color: n.color, label: n.id, value: n.value,
     });
   });
-  rightVisualNodes.forEach((n, i) => {
+  rightNodes.forEach((n, i) => {
     links.push({
       x0: incomeNode.x + nodeWidth, x1: rightX,
       y0top: rightSlots[i].y0, y0bot: rightSlots[i].y1,
@@ -180,7 +177,7 @@ function buildSankeyModel(incomeEntries, expenseEntries, savings, width, height)
     });
   });
 
-  return { leftNodes, rightNodes: rightVisualNodes, incomeNode, links, leftX, rightX, nodeWidth, totalIncome };
+  return { leftNodes, rightNodes, incomeNode, links, leftX, rightX, nodeWidth, totalIncome };
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +219,7 @@ function drawSankey(incomeEntries, expenseEntries, savings) {
       d: linkPath(l),
       fill: l.color,
       "fill-opacity": "0.45",
-      class: "sankey-link animated-flow",
+      class: "sankey-link",
     });
     path.addEventListener("mouseenter", (e) => showTooltip(e, l.label, l.value, path));
     path.addEventListener("mousemove", (e) => positionTooltip(e));
@@ -235,7 +232,7 @@ function drawSankey(incomeEntries, expenseEntries, savings) {
   model.leftNodes.forEach((n) => {
     g.appendChild(svgEl("rect", {
       x: model.leftX, y: n.y0, width: model.nodeWidth, height: Math.max(1, n.y1 - n.y0),
-      rx: 4, fill: n.color, class: "sankey-node sankey-node-animated",
+      rx: 3, fill: n.color, class: "sankey-node",
     }));
     const label = svgEl("text", {
       x: model.leftX + model.nodeWidth + 8, y: (n.y0 + n.y1) / 2,
@@ -267,7 +264,7 @@ function drawSankey(incomeEntries, expenseEntries, savings) {
   model.rightNodes.forEach((n) => {
     g.appendChild(svgEl("rect", {
       x: model.rightX, y: n.y0, width: model.nodeWidth, height: Math.max(1, n.y1 - n.y0),
-      rx: 4, fill: n.color, class: "sankey-node sankey-node-animated",
+      rx: 3, fill: n.color, class: "sankey-node",
     }));
     const label = svgEl("text", {
       x: model.rightX - 8, y: (n.y0 + n.y1) / 2,

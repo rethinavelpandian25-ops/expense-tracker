@@ -4,17 +4,15 @@
 let categoryChart = null;
 let monthlyBarChart = null;
 let cashflowChart = null;
+let cashflowMode = "income";
 let lastMonthlyData = {};
 
 // Populated server-side (see the inline script in app_shell.html) so the
 // page already knows the signed-in user without an extra round trip.
-const account = window.LEDGER_USER || { username: "", profile_pic: null, currency_symbol: "₹", currency_locale: "en-IN" };
+const account = window.LEDGER_USER || { username: "", profile_pic: null };
 
-const currency = (n) => {
-  const symbol = account.currency_symbol || "₹";
-  const locale = account.currency_locale || "en-IN";
-  return symbol + Number(n).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
+const currency = (n) =>
+  "₹" + Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const monthLabel = (ymKey) => {
   const [y, m] = ymKey.split("-");
@@ -46,8 +44,15 @@ const SEVERITY_ICONS = {
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
   renderAvatars();
-  const pdfBtn = document.getElementById("downloadPdfBtn");
-  if (pdfBtn) pdfBtn.addEventListener("click", () => { window.location.href = "/api/reports/pdf"; });
+
+  document.querySelectorAll(".pill-btn[data-cashflow]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".pill-btn[data-cashflow]").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      cashflowMode = btn.dataset.cashflow;
+      renderCashflowChart(lastMonthlyData);
+    });
+  });
 
   loadReports();
 });
@@ -293,29 +298,46 @@ function renderMonthlyBarChart(monthly) {
 
 function renderCashflowChart(monthly) {
   const ctx = document.getElementById("cashflowChart");
-  const keys = Object.keys(monthly);
-  const labels = keys.map(monthLabel);
-  const income = keys.map((k) => monthly[k].income);
-  const expense = keys.map((k) => monthly[k].expense);
-  const net = keys.map((k) => monthly[k].income - monthly[k].expense);
+  const labels = Object.keys(monthly).map(monthLabel);
+  const values = Object.values(monthly).map((m) => m[cashflowMode]);
+  const color = cashflowMode === "income" ? cssVar("--income") : cssVar("--expense");
+  const bg = `color-mix(in srgb, ${color} 14%, transparent)`;
   const gridColor = cssVar("--border");
   const tickColor = cssVar("--muted");
+
   if (cashflowChart) { cashflowChart.destroy(); cashflowChart = null; }
-  if (!labels.length) { ctx.getContext("2d").clearRect(0,0,ctx.width,ctx.height); return; }
-  const gradient = ctx.getContext("2d").createLinearGradient(0,0,0,260);
-  gradient.addColorStop(0, "rgba(99,102,241,.24)");
-  gradient.addColorStop(1, "rgba(99,102,241,0)");
+
+  if (!labels.length) {
+    ctx.getContext("2d").clearRect(0, 0, ctx.width, ctx.height);
+    return;
+  }
+
   cashflowChart = new Chart(ctx, {
     type: "line",
-    data: { labels, datasets: [
-      { label:"Income", data:income, borderColor:"#16a34a", backgroundColor:"rgba(22,163,74,.08)", tension:.38, borderWidth:3, pointRadius:4, pointHoverRadius:7, fill:false },
-      { label:"Expenses", data:expense, borderColor:"#ef4444", backgroundColor:"rgba(239,68,68,.08)", tension:.38, borderWidth:3, pointRadius:4, pointHoverRadius:7, fill:false },
-      { label:"Net cash flow", data:net, borderColor:"#6366f1", backgroundColor:gradient, tension:.38, borderWidth:2.5, pointRadius:3, pointHoverRadius:6, fill:true }
-    ]},
-    options: { responsive:true, maintainAspectRatio:false, interaction:{mode:"index",intersect:false}, plugins:{legend:{position:"bottom",labels:{usePointStyle:true,color:tickColor,padding:18}}}, animation:{duration:1200,easing:"easeOutQuart"}, scales:{y:{beginAtZero:true,grid:{color:gridColor},ticks:{color:tickColor}},x:{grid:{display:false},ticks:{color:tickColor}}} }
+    data: {
+      labels,
+      datasets: [{
+        label: cashflowMode === "income" ? "Income" : "Expense",
+        data: values,
+        borderColor: color,
+        backgroundColor: bg,
+        fill: true,
+        tension: 0.35,
+        pointRadius: 3,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      animation: { duration: 900, easing: "easeOutQuart" },
+      scales: {
+        y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor } },
+        x: { grid: { display: false }, ticks: { color: tickColor } },
+      },
+    },
   });
 }
-
 
 // ---------------------------------------------------------------------------
 // Smart insights

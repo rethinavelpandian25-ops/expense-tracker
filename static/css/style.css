@@ -1431,29 +1431,3 @@ table.txn-table { width: 100%; border-collapse: collapse; }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
-
-
-/* Product updates: desktop-only cash-flow graph, settings editing and report polish */
-.desktop-only-nav { display:flex; }
-.profile-summary { cursor:default; }
-.avatar { cursor:default; }
-.panel-header .btn-ghost-outline { margin-left:auto; }
-.chart-caption { color:var(--muted); font-size:.78rem; }
-.username-view { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:44px; }
-.username-view span { font-weight:700; }
-.icon-btn { border:0; background:transparent; color:var(--primary); font-size:1.1rem; cursor:pointer; padding:8px; border-radius:10px; transition:transform .2s ease, background .2s ease; }
-.icon-btn:hover { background:color-mix(in srgb,var(--primary) 10%,transparent); transform:translateY(-1px); }
-.username-actions { display:flex; gap:8px; justify-content:flex-end; }
-.full-select { width:100%; min-height:44px; border:1px solid var(--border); border-radius:12px; padding:0 12px; background:var(--surface); color:var(--ink); }
-.currency-preview { margin-top:10px; padding:10px 12px; border-radius:10px; background:color-mix(in srgb,var(--primary) 7%,var(--surface)); color:var(--muted); font-size:.85rem; }
-.sankey-link { transition:fill-opacity .25s ease, filter .25s ease, transform .25s ease; transform-origin:center; }
-.sankey-link:hover, .sankey-link.is-active { fill-opacity:.82 !important; filter:drop-shadow(0 4px 7px rgba(15,23,42,.16)); }
-.sankey-node-animated { transition:filter .25s ease, opacity .25s ease; }
-.sankey-node-animated:hover { filter:brightness(1.08) drop-shadow(0 3px 5px rgba(15,23,42,.14)); }
-@keyframes flowDash { to { stroke-dashoffset:-80; } }
-.sankey-link { stroke:currentColor; stroke-width:.3px; }
-@media (max-width:720px) {
-  .desktop-only-nav { display:none !important; }
-  .panel-header .btn-ghost-outline { width:100%; margin:8px 0 0; justify-content:center; }
-  .username-actions { flex-direction:column; }
-}

@@ -31,21 +31,10 @@
 
       <div class="settings-card">
         <h3>Username</h3>
-        <div class="username-view" id="usernameView">
-          <span id="usernameDisplay"></span>
-          <button type="button" class="icon-btn" id="editUsernameBtn" title="Edit username" aria-label="Edit username">✎</button>
-        </div>
-        <form id="usernameForm" class="inline-form username-edit-form" style="display:none;">
+        <form id="usernameForm" class="inline-form">
           <input type="text" id="usernameInput" maxlength="80" required />
-          <div class="username-actions"><button type="button" class="btn-ghost-outline" id="cancelUsernameBtn">Cancel</button><button type="submit" class="btn-solid">Save changes</button></div>
+          <button type="submit" class="btn-solid">Save</button>
         </form>
-      </div>
-
-      <div class="settings-card">
-        <h3>Country & currency</h3>
-        <p class="field-hint">Choose your country. The currency symbol and formatting update across the webapp and Android app.</p>
-        <select id="countrySelect" class="full-select"></select>
-        <div class="currency-preview" id="currencyPreview"></div>
       </div>
 
       <div class="settings-card">
@@ -104,6 +93,7 @@
   <a href="/dashboard#overview" data-target="overview" title="Dashboard" aria-label="Dashboard">{{ icon('dashboard') }}</a>
   <a href="/transactions" title="Transactions" aria-label="Transactions">{{ icon('transactions') }}</a>
   <a href="/reports" title="Reports" aria-label="Reports">{{ icon('reports') }}</a>
+  <a href="/money-flow" title="Money Flow" aria-label="Money Flow">{{ icon('flow') }}</a>
   <a href="/settings" class="active" title="Settings" aria-label="Settings">{{ icon('settings') }}</a>
 {% endblock %}
 

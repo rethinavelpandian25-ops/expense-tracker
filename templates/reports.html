@@ -6,9 +6,29 @@
   <header class="topbar">
     <h1 class="page-title">Reports</h1>
     <div class="topbar-actions">
-      <div class="avatar" id="avatarBtn" title="Profile"></div>
+      <a class="avatar" id="avatarBtn" href="/settings" title="Settings" aria-label="Open settings"></a>
     </div>
   </header>
+
+  <section class="panel insights-panel" id="insightsPanel">
+    <div class="panel-header">
+      <h2 class="insights-heading">{{ icon('sparkles') }} Smart insights</h2>
+    </div>
+    <p class="field-hint insights-disclaimer">
+      Generated from patterns in your own transaction history (spending trends, category
+      totals, month-to-month changes) — not financial advice, just a second pair of eyes on your data.
+    </p>
+
+    <div class="insights-list" id="insightsList"></div>
+    <div class="empty-state" id="insightsEmptyState" style="display:none;">
+      Add a few more transactions (at least 5, across a month or two) and personalized insights will show up here.
+    </div>
+    <div class="insights-loading" id="insightsLoading">
+      <div class="skeleton-line"></div>
+      <div class="skeleton-line"></div>
+      <div class="skeleton-line short"></div>
+    </div>
+  </section>
 
   <section class="panel" id="statsPanel">
     <div class="stats-row">
@@ -42,7 +62,7 @@
   </section>
 
   <section class="panel" id="charts">
-    <div class="panel-header"><h2>Charts</h2><button class="btn-ghost-outline" id="downloadPdfBtn" type="button">Download professional PDF</button></div>
+    <div class="panel-header"><h2>Charts</h2></div>
     <div class="reports-grid">
       <div class="reports-main">
         <div class="chart-card">
@@ -58,8 +78,11 @@
 
         <div class="chart-card">
           <div class="chart-card-header">
-            <h3>Cash flow trend</h3>
-            <span class="chart-caption">Income + expenses + net</span>
+            <h3>Cashflow</h3>
+            <div class="toggle-pill">
+              <button type="button" class="pill-btn active" data-cashflow="income">Income</button>
+              <button type="button" class="pill-btn" data-cashflow="expense">Expenses</button>
+            </div>
           </div>
           <div class="chart-box"><canvas id="cashflowChart"></canvas></div>
         </div>
@@ -80,22 +103,13 @@
       </div>
     </div>
   </section>
-
-  <section class="panel insights-panel" id="insightsPanel">
-    <div class="panel-header">
-      <h2 class="insights-heading">{{ icon('sparkles') }} Smart insights</h2>
-    </div>
-    <p class="field-hint insights-disclaimer">Generated from patterns in your own transaction history — spending trends, category totals and month-to-month changes.</p>
-    <div class="insights-list" id="insightsList"></div>
-    <div class="empty-state" id="insightsEmptyState" style="display:none;">Add a few more transactions and personalized insights will show up here.</div>
-    <div class="insights-loading" id="insightsLoading"><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
-  </section>
 {% endblock %}
 
 {% block mobile_nav %}
   <a href="/dashboard#overview" data-target="overview" title="Dashboard" aria-label="Dashboard">{{ icon('dashboard') }}</a>
   <a href="/transactions" title="Transactions" aria-label="Transactions">{{ icon('transactions') }}</a>
   <a href="/reports" class="active" title="Reports" aria-label="Reports">{{ icon('reports') }}</a>
+  <a href="/money-flow" title="Money Flow" aria-label="Money Flow">{{ icon('flow') }}</a>
   <a href="/settings" title="Settings" aria-label="Settings">{{ icon('settings') }}</a>
 {% endblock %}
 

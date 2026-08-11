@@ -1,0 +1,22 @@
+{
+  "appId": "com.ledger.expensetracker",
+  "appName": "Ledger",
+  "webDir": "www",
+  "server": {
+    "url": "https://YOUR-APP-NAME.onrender.com",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#f4f4fb",
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "backgroundColor": "#6d28d9",
+      "androidSplashResourceName": "splash",
+      "showSpinner": false
+    }
+  }
+}
